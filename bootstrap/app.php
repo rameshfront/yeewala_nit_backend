@@ -89,6 +89,22 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
+        // 5. Rate Limit / High Traffic Errors (429 Too Many Requests)
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException $e, $request) {
+            if ($request->is('api/*') || $request->wantsJson()) {
+                return response()->json([
+                    'data' => null,
+                    'meta' => null,
+                    'errors' => [
+                        [
+                            'code' => 'TOO_MANY_REQUESTS',
+                            'message' => 'Our servers are experiencing high traffic right now. Please try again in a few moments.',
+                        ]
+                    ],
+                ], 429);
+            }
+        });
+
         // 5. Generic Server Errors (500 Internal Server Error)
         $exceptions->render(function (Throwable $e, $request) {
             if ($request->is('api/*') || $request->wantsJson()) {

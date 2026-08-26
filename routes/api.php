@@ -7,13 +7,20 @@ use App\Http\Controllers\Api\V1\Creator\CreatorController;
 use App\Http\Controllers\Api\V1\Engagement\HistoryController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('v1')->group(function () {
+Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'updateProfile']);
     Route::post('/me/avatar', [AuthController::class, 'updateAvatar']);
+
+    // Email & Phone Verification Routes
+    Route::post('/auth/email/resend', [AuthController::class, 'resendVerificationEmail']);
+    Route::get('/auth/verify-email/{id}/{hash}', [AuthController::class, 'verifyEmail']);
+    Route::get('/auth/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail']);
+    Route::post('/auth/phone/send-code', [AuthController::class, 'sendPhoneVerificationCode']);
+    Route::post('/auth/phone/verify', [AuthController::class, 'verifyPhoneCode']);
 
     Route::get('/videos', [VideoController::class, 'index']);
     Route::get('/videos/mine', [VideoController::class, 'myVideos']);
@@ -37,6 +44,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/creator/dashboard', [CreatorController::class, 'getDashboard']);
     Route::get('/creator/profile', [CreatorController::class, 'getProfile']);
     Route::get('/me/following', [CreatorController::class, 'listFollowing']);
+    Route::get('/me/followers', [CreatorController::class, 'listFollowers']);
     Route::get('/creators/{id}', [CreatorController::class, 'show']);
     Route::get('/creators/{id}/videos', [CreatorController::class, 'getCreatorVideos']);
     Route::post('/creators/{id}/follow', [CreatorController::class, 'follow']);
