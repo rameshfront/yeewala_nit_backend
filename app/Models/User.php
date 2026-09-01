@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -36,6 +37,22 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Get the roles assigned to this user from the model_has_roles + roles tables.
+     * Returns an array of role name strings, e.g. ['super_admin'] or ['user'].
+     */
+    public function getRoleNames(): array
+    {
+        $roles = DB::table('model_has_roles')
+            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+            ->where('model_has_roles.model_type', self::class)
+            ->where('model_has_roles.model_id', $this->id)
+            ->pluck('roles.name')
+            ->toArray();
+
+        return count($roles) > 0 ? $roles : ['user'];
+    }
+
     public function formatForFrontend(): array
     {
         $avatarUrl = $this->avatar_path;
@@ -48,16 +65,16 @@ class User extends Authenticatable
         }
 
         return [
-            'id' => (int)$this->id,
-            'name' => $this->name,
-            'email' => $this->email,
-            'phone' => $this->phone,
-            'phone_verified_at' => $this->phone_verified_at?->toISOString(),
-            'avatar_url' => $avatarUrl,
-            'email_verified_at' => $this->email_verified_at?->toISOString(),
+            'id'                 => (int)$this->id,
+            'name'               => $this->name,
+            'email'              => $this->email,
+            'phone'              => $this->phone,
+            'phone_verified_at'  => $this->phone_verified_at?->toISOString(),
+            'avatar_url'         => $avatarUrl,
+            'email_verified_at'  => $this->email_verified_at?->toISOString(),
             'two_factor_enabled' => (bool)$this->two_factor_enabled,
-            'roles' => ['user'],
-            'created_at' => $this->created_at->toISOString(),
+            'roles'              => $this->getRoleNames(),
+            'created_at'         => $this->created_at->toISOString(),
         ];
     }
 }

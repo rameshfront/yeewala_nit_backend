@@ -38,14 +38,22 @@ class WalletController extends Controller
 
         $balance = $this->calculateWalletBalance($wallet->id);
 
+        $freshUser = DB::table('users')->where('id', $user->id)->first();
+        $amount = number_format((float)($freshUser->amount ?? 0), 2, '.', '');
+        $earnings = number_format((float)($freshUser->earnings ?? 0), 2, '.', '');
+        $actualearning = number_format((float)($freshUser->actualearning ?? 0), 2, '.', '');
+
         return response()->json([
             'data' => [
                 'id' => (int)$wallet->id,
                 'type' => $wallet->type,
                 'owner_id' => (int)$wallet->owner_id,
                 'currency' => $wallet->currency,
-                'available_balance_minor_units' => $balance,
-                'pending_balance_minor_units' => 0,
+                'amount' => $amount,
+                'earnings' => $earnings,
+                'actualearning' => $actualearning,
+                'available_balance_minor_units' => (int)round((float)$amount * 100),
+                'pending_balance_minor_units' => (int)round((float)$earnings * 100),
                 'created_at' => $wallet->created_at,
                 'updated_at' => $wallet->updated_at,
             ],
@@ -87,6 +95,7 @@ class WalletController extends Controller
 
     /**
      * Purchase a video using wallet balance.
+     * Uses WalletService to deduct buyer amount and credit uploader pending earnings.
      */
     public function purchaseVideo(Request $request, $id)
     {
@@ -95,94 +104,37 @@ class WalletController extends Controller
             return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]], 401);
         }
 
-        $video = DB::table('videos')->where('id', $id)->whereNull('deleted_at')->first();
-        if (!$video) {
-            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'NOT_FOUND', 'message' => 'Video not found']]], 404);
-        }
-
-        // Check if already purchased
-        $existing = DB::table('video_purchases')->where('user_id', $user->id)->where('video_id', $id)->first();
-        if ($existing) {
-            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'ALREADY_PURCHASED', 'message' => 'Video already purchased']]], 400);
-        }
-
-        $price = (int)($video->price_minor_units ?? 0);
-        if ($price <= 0) {
-            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'FREE_VIDEO', 'message' => 'This video is free']]], 400);
-        }
-
-        // Get user wallet
-        $wallet = DB::table('wallets')->where('owner_id', $user->id)->where('type', 'user')->first();
-        if (!$wallet) {
-            // Create wallet if missing
-            $walletId = DB::table('wallets')->insertGetId([
-                'type' => 'user',
-                'owner_id' => $user->id,
-                'currency' => 'INR',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-            $wallet = DB::table('wallets')->where('id', $walletId)->first();
-        }
-
-        $balance = $this->calculateWalletBalance($wallet->id);
-        if ($balance < $price) {
-            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'INSUFFICIENT_FUNDS', 'message' => 'Insufficient wallet balance']]], 400);
-        }
-
-        // Perform purchase transaction
-        DB::beginTransaction();
         try {
-            // 1. Create video_purchases record
-            $purchaseId = DB::table('video_purchases')->insertGetId([
-                'user_id' => $user->id,
-                'video_id' => $id,
-                'price_minor_units' => $price,
-                'currency' => 'INR',
-                'purchased_at' => now(),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            $walletService = app(\App\Services\Wallet\WalletService::class);
+            $result = $walletService->purchaseVideos((int)$user->id, [(int)$id]);
 
-            // 2. Debit user wallet
-            DB::table('wallet_transactions')->insert([
-                'wallet_id' => $wallet->id,
-                'type' => 'debit',
-                'category' => 'purchase',
-                'amount_minor_units' => $price,
-                'status' => 'cleared',
-                'source_type' => 'App\\Domain\\Monetization\\Models\\VideoPurchase',
-                'source_id' => $purchaseId,
-                'description' => "Purchase of video #{$id}",
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            DB::commit();
-
-            $newBalance = $this->calculateWalletBalance($wallet->id);
+            $video = DB::table('videos')->where('id', $id)->first();
+            $priceMinorUnits = (int)round(((float)($result['total_deducted'] ?? 0)) * 100);
 
             return response()->json([
                 'data' => [
                     'purchase' => [
-                        'id' => (int)$purchaseId,
+                        'id' => (int)$id,
                         'user_id' => (int)$user->id,
                         'video_id' => (int)$id,
-                        'price_minor_units' => $price,
+                        'price_minor_units' => $priceMinorUnits,
                         'currency' => 'INR',
                         'purchased_at' => now()->toIso8601String(),
                     ],
                     'wallet' => [
-                        'id' => (int)$wallet->id,
-                        'available_balance_minor_units' => $newBalance,
-                    ]
+                        'amount' => $result['amount'],
+                        'available_balance_minor_units' => (int)round(((float)$result['amount']) * 100),
+                    ],
                 ],
                 'meta' => null,
                 'errors' => null,
             ]);
+        } catch (\App\Exceptions\Wallet\InsufficientBalanceException $e) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'INSUFFICIENT_FUNDS', 'message' => $e->getMessage()]]], 400);
+        } catch (\App\Exceptions\Wallet\VideoAlreadyPurchasedException $e) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'ALREADY_PURCHASED', 'message' => $e->getMessage()]]], 400);
         } catch (\Throwable $e) {
-            DB::rollBack();
-            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'TRANSACTION_FAILED', 'message' => 'Failed to process purchase']]], 500);
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'PURCHASE_FAILED', 'message' => $e->getMessage()]]], 400);
         }
     }
 

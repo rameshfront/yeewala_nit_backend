@@ -5,9 +5,16 @@ use App\Http\Controllers\Api\V1\Video\VideoController;
 use App\Http\Controllers\Api\V1\Monetization\WalletController;
 use App\Http\Controllers\Api\V1\Creator\CreatorController;
 use App\Http\Controllers\Api\V1\Engagement\HistoryController;
+use App\Http\Controllers\Api\V1\Admin\SettingsController;
+use App\Http\Controllers\Api\V1\Admin\AdminDashboardController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->middleware('throttle:api')->group(function () {
+    // Admin Settings & Dashboard
+    Route::get('/admin/settings', [SettingsController::class, 'index']);
+    Route::patch('/admin/settings/{group}', [SettingsController::class, 'update']);
+    Route::get('/admin/dashboard', [AdminDashboardController::class, 'getDashboard']);
+
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
@@ -35,10 +42,17 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
 
     // Wallet & Video Purchases
     Route::get('/wallet', [WalletController::class, 'getMyWallet']);
+    Route::get('/wallet/balances', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'getWalletBalances']);
     Route::post('/wallet/topups', [WalletController::class, 'topUp']);
     Route::get('/me/purchased-videos', [WalletController::class, 'listPurchasedVideos']);
     Route::post('/wallet/videos/{id}/purchase', [WalletController::class, 'purchaseVideo']);
+    Route::post('/wallet/purchase', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'purchaseVideos']);
+    Route::post('/wallet/withdraw', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'requestWithdrawal']);
     Route::post('/admin/users/{userId}/wallet/credit', [WalletController::class, 'adminCreditWallet']);
+    Route::post('/admin/wallet/approve-earnings', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'approveEarnings']);
+    Route::post('/admin/wallet/withdrawals/{id}/approve', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'approveWithdrawal']);
+    Route::post('/admin/wallet/withdrawals/{id}/reject', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'rejectWithdrawal']);
+    Route::post('/admin/wallet/approve-recharge', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'approveRecharge']);
 
     // Creator Profile & Channel Pages
     Route::get('/creator/dashboard', [CreatorController::class, 'getDashboard']);
