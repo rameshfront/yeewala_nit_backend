@@ -1,9 +1,11 @@
 /vendor/
 /node_modules/
 .env
+.env.*
 .env.backup
 .env.production
 .env.*.local
+.env.local
 /storage/*.key
 /storage/app/public/*
 !/storage/app/public/.gitignore
