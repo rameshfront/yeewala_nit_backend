@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Video\VideoController;
 use App\Http\Controllers\Api\V1\Monetization\WalletController;
+use App\Http\Controllers\Api\V1\Monetization\OrderController;
 use App\Http\Controllers\Api\V1\Creator\CreatorController;
 use App\Http\Controllers\Api\V1\Engagement\HistoryController;
 use App\Http\Controllers\Api\V1\Admin\SettingsController;
@@ -45,6 +46,9 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::get('/wallet/balances', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'getWalletBalances']);
     Route::post('/wallet/topups', [WalletController::class, 'topUp']);
     Route::get('/me/purchased-videos', [WalletController::class, 'listPurchasedVideos']);
+    Route::get('/orders', [OrderController::class, 'index']);
+    Route::get('/orders/{id}', [OrderController::class, 'show']);
+    Route::get('/orders/{id}/status', [OrderController::class, 'status']);
     Route::post('/wallet/videos/{id}/purchase', [WalletController::class, 'purchaseVideo']);
     Route::post('/wallet/purchase', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'purchaseVideos']);
     Route::post('/wallet/withdraw', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'requestWithdrawal']);

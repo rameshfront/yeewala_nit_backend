@@ -170,6 +170,25 @@ class WalletService
                     ]);
                 }
 
+                if (Schema::hasTable('orders')) {
+                    $priceMinor = (int)bcmul($record['price'], '100', 0);
+                    DB::table('orders')->insert([
+                        'order_number'        => 'ORD-VP-' . strtoupper(uniqid()),
+                        'user_id'             => $buyerId,
+                        'orderable_type'      => 'video',
+                        'orderable_id'        => $record['video_id'],
+                        'amount_minor_units'  => $priceMinor,
+                        'discount_minor_units'=> 0,
+                        'total_minor_units'   => $priceMinor,
+                        'currency'            => 'INR',
+                        'status'              => 'paid',
+                        'gateway'             => 'wallet',
+                        'paid_at'             => $now,
+                        'created_at'          => $now,
+                        'updated_at'          => $now,
+                    ]);
+                }
+
                 // Insert into saved_videos table
                 if (Schema::hasTable('saved_videos')) {
                     DB::table('saved_videos')->updateOrInsert(
