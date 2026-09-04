@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\Video\VideoController;
 use App\Http\Controllers\Api\V1\Monetization\WalletController;
 use App\Http\Controllers\Api\V1\Monetization\OrderController;
 use App\Http\Controllers\Api\V1\Creator\CreatorController;
+use App\Http\Controllers\Api\V1\Analytics\CreatorAnalyticsController;
 use App\Http\Controllers\Api\V1\Engagement\HistoryController;
 use App\Http\Controllers\Api\V1\Admin\SettingsController;
 use App\Http\Controllers\Api\V1\Admin\AdminDashboardController;
@@ -61,6 +62,12 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     // Creator Profile & Channel Pages
     Route::get('/creator/dashboard', [CreatorController::class, 'getDashboard']);
     Route::get('/creator/profile', [CreatorController::class, 'getProfile']);
+    Route::get('/creator/analytics/videos', [CreatorAnalyticsController::class, 'videos']);
+    Route::get('/creator/analytics/overview', [CreatorAnalyticsController::class, 'overview']);
+    Route::get('/creator/analytics/trends', [CreatorAnalyticsController::class, 'trends']);
+    Route::get('/creator/analytics/videos/top', [CreatorAnalyticsController::class, 'topVideos']);
+    Route::get('/creator/analytics/breakdown', [CreatorAnalyticsController::class, 'breakdown']);
+    Route::get('/creator/analytics/search-keywords', [CreatorAnalyticsController::class, 'searchKeywords']);
     Route::get('/me/following', [CreatorController::class, 'listFollowing']);
     Route::get('/me/followers', [CreatorController::class, 'listFollowers']);
     Route::get('/creators/{id}', [CreatorController::class, 'show']);
