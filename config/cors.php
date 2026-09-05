@@ -6,6 +6,9 @@ return [
     'allowed_origins' => array_values(array_unique(array_filter([
         'http://localhost:3000',
         'http://127.0.0.1:3000',
+        'https://sikaa.online',
+        'https://www.sikaa.online',
+        'https://api.sikaa.online',
         'https://papayawhip-dotterel-898881.hostingersite.com',
         rtrim(env('FRONTEND_URL', ''), '/'),
     ]))),
