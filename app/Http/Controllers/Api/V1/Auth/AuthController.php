@@ -99,6 +99,8 @@ class AuthController extends Controller
             ], 401);
         }
 
+        $user->load(['country', 'state']);
+
         return response()->json([
             'data' => $user->formatForFrontend(),
             'meta' => null,
@@ -145,6 +147,8 @@ class AuthController extends Controller
         \Illuminate\Support\Facades\DB::table('creator_profiles')
             ->where('user_id', $user->id)
             ->update(['channel_name' => $user->name, 'updated_at' => now()]);
+
+        $user->load(['country', 'state']);
 
         return response()->json([
             'data' => $user->formatForFrontend(),
