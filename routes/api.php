@@ -42,7 +42,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::post('/auth/google', [GoogleAuthController::class, 'authWithGoogle']);
     Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirectToGoogle']);
     Route::get('/auth/google/callback', [GoogleAuthController::class, 'handleGoogleCallback']);
-    Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'updateProfile']);
     Route::post('/me/avatar', [AuthController::class, 'updateAvatar']);
