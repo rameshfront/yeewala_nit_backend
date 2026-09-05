@@ -24,12 +24,23 @@ Route::get('/clear', function () {
     ];
     foreach ($directories as $dir) {
         if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
+            @mkdir($dir, 0775, true);
         }
     }
-    \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+
+    $results = [];
+    foreach (['config:clear', 'route:clear', 'cache:clear'] as $cmd) {
+        try {
+            \Illuminate\Support\Facades\Artisan::call($cmd);
+            $results[$cmd] = 'OK';
+        } catch (\Throwable $e) {
+            $results[$cmd] = 'Error: ' . $e->getMessage();
+        }
+    }
+
     return response()->json([
         'status' => 'success',
-        'message' => 'Storage directories created & cache cleared successfully!',
+        'message' => 'Cache cleared successfully!',
+        'results' => $results,
     ]);
 });

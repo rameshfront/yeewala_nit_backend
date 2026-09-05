@@ -1,4 +1,13 @@
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "https://sikaa.online"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Origin, Content-Type, Accept, Authorization, X-Requested-With, X-XSRF-TOKEN, ngrok-skip-browser-warning"
+    Header always set Access-Control-Allow-Credentials "true"
+</IfModule>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule ^(.*)$ public/$1 [L]
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>

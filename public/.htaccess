@@ -1,9 +1,20 @@
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "https://sikaa.online"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Origin, Content-Type, Accept, Authorization, X-Requested-With, X-XSRF-TOKEN, ngrok-skip-browser-warning"
+    Header always set Access-Control-Allow-Credentials "true"
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
     </IfModule>
 
     RewriteEngine On
+
+    # Intercept and fast-reply to CORS preflight OPTIONS requests
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule ^(.*)$ $1 [R=204,L]
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
