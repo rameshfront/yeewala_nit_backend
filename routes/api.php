@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
+use App\Http\Controllers\Api\V1\Auth\GoogleAuthController;
 use App\Http\Controllers\Api\V1\Video\VideoController;
 use App\Http\Controllers\Api\V1\Monetization\WalletController;
 use App\Http\Controllers\Api\V1\Monetization\OrderController;
@@ -37,6 +38,9 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
 
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/auth/google', [GoogleAuthController::class, 'authWithGoogle']);
+    Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirectToGoogle']);
+    Route::get('/auth/google/callback', [GoogleAuthController::class, 'handleGoogleCallback']);
     Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'updateProfile']);
