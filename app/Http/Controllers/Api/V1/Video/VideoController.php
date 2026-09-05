@@ -8,15 +8,25 @@ use Illuminate\Support\Facades\DB;
 
 class VideoController extends Controller
 {
-    public function formatVideo($v)
+    public function formatVideo($v, $myReaction = null)
     {
-        $avatarUrl = $v->avatar_path;
+        $avatarUrl = $v->avatar_path ?? null;
         if ($avatarUrl && !str_starts_with($avatarUrl, 'http://') && !str_starts_with($avatarUrl, 'https://')) {
             $baseUrl = rtrim(config('app.url', 'http://localhost:8000'), '/');
             if (!str_starts_with($avatarUrl, '/storage/') && !str_starts_with($avatarUrl, 'storage/')) {
                 $avatarUrl = '/storage/' . ltrim($avatarUrl, '/');
             }
             $avatarUrl = $baseUrl . '/' . ltrim($avatarUrl, '/');
+        }
+
+        if ($myReaction === null) {
+            $user = auth('sanctum')->user() ?? auth('web')->user();
+            if ($user && isset($v->id)) {
+                $myReaction = DB::table('video_reactions')
+                    ->where('video_id', $v->id)
+                    ->where('user_id', $user->id)
+                    ->value('type');
+            }
         }
 
         return [
@@ -53,7 +63,7 @@ class VideoController extends Controller
             'like_count' => (int)($v->like_count ?? 0),
             'dislike_count' => (int)($v->dislike_count ?? 0),
             'comment_count' => (int)($v->comment_count ?? 0),
-            'my_reaction' => null,
+            'my_reaction' => $myReaction,
             'scheduled_at' => null,
             'published_at' => $v->published_at,
             'thumbnail_url' => $v->thumbnail_path,
@@ -193,6 +203,10 @@ class VideoController extends Controller
                 ], 403);
             }
         }
+
+        // Increment real view count when video is accessible
+        DB::table('videos')->where('id', $id)->increment('view_count');
+        $v->view_count = ((int)$v->view_count) + 1;
 
         return response()->json([
             'data' => $this->formatVideo($v),

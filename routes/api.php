@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Monetization\OrderController;
 use App\Http\Controllers\Api\V1\Creator\CreatorController;
 use App\Http\Controllers\Api\V1\Analytics\CreatorAnalyticsController;
 use App\Http\Controllers\Api\V1\Engagement\HistoryController;
+use App\Http\Controllers\Api\V1\Engagement\EngagementController;
 use App\Http\Controllers\Api\V1\Admin\SettingsController;
 use App\Http\Controllers\Api\V1\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminLocationController;
@@ -108,4 +109,17 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::delete('/me/history/{videoId}', [HistoryController::class, 'destroy']);
     Route::delete('/me/history', [HistoryController::class, 'clear']);
     Route::put('/videos/{videoId}/progress', [HistoryController::class, 'syncProgress']);
+
+    // Video Reactions & Engagement
+    Route::get('/videos/{id}/reaction', [EngagementController::class, 'getReaction']);
+    Route::put('/videos/{id}/reaction', [EngagementController::class, 'setReaction'])->middleware('auth:sanctum');
+
+    // Video Comments
+    Route::get('/videos/{id}/comments', [EngagementController::class, 'listComments']);
+    Route::post('/videos/{id}/comments', [EngagementController::class, 'postComment'])->middleware('auth:sanctum');
+    Route::patch('/comments/{id}', [EngagementController::class, 'updateComment'])->middleware('auth:sanctum');
+    Route::delete('/comments/{id}', [EngagementController::class, 'deleteComment'])->middleware('auth:sanctum');
+    Route::get('/comments/{id}/replies', [EngagementController::class, 'listReplies']);
+    Route::patch('/comments/{id}/heart', [EngagementController::class, 'heartComment'])->middleware('auth:sanctum');
+    Route::patch('/comments/{id}/pin', [EngagementController::class, 'pinComment'])->middleware('auth:sanctum');
 });
