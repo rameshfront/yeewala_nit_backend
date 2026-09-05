@@ -9,13 +9,31 @@ use App\Http\Controllers\Api\V1\Analytics\CreatorAnalyticsController;
 use App\Http\Controllers\Api\V1\Engagement\HistoryController;
 use App\Http\Controllers\Api\V1\Admin\SettingsController;
 use App\Http\Controllers\Api\V1\Admin\AdminDashboardController;
+use App\Http\Controllers\Api\V1\Admin\AdminLocationController;
+use App\Http\Controllers\Api\V1\Location\LocationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->middleware('throttle:api')->group(function () {
-    // Admin Settings & Dashboard
+    // Public Location Routes (Countries & States)
+    Route::get('/countries', [LocationController::class, 'countries']);
+    Route::get('/countries/{countryId}/states', [LocationController::class, 'states']);
+
+    // Admin Settings, Locations & Dashboard
     Route::get('/admin/settings', [SettingsController::class, 'index']);
     Route::patch('/admin/settings/{group}', [SettingsController::class, 'update']);
     Route::get('/admin/dashboard', [AdminDashboardController::class, 'getDashboard']);
+
+    Route::get('/admin/countries', [AdminLocationController::class, 'listCountries']);
+    Route::post('/admin/countries', [AdminLocationController::class, 'storeCountry']);
+    Route::get('/admin/countries/{id}', [AdminLocationController::class, 'showCountry']);
+    Route::match(['put', 'patch'], '/admin/countries/{id}', [AdminLocationController::class, 'updateCountry']);
+    Route::delete('/admin/countries/{id}', [AdminLocationController::class, 'destroyCountry']);
+
+    Route::get('/admin/states', [AdminLocationController::class, 'listStates']);
+    Route::post('/admin/states', [AdminLocationController::class, 'storeState']);
+    Route::get('/admin/states/{id}', [AdminLocationController::class, 'showState']);
+    Route::match(['put', 'patch'], '/admin/states/{id}', [AdminLocationController::class, 'updateState']);
+    Route::delete('/admin/states/{id}', [AdminLocationController::class, 'destroyState']);
 
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);

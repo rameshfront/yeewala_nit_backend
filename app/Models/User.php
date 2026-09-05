@@ -16,6 +16,8 @@ class User extends Authenticatable
         'name',
         'email',
         'phone',
+        'country_id',
+        'state_id',
         'phone_verified_at',
         'avatar_path',
         'two_factor_enabled',
@@ -30,11 +32,23 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
+            'country_id' => 'integer',
+            'state_id' => 'integer',
             'email_verified_at' => 'datetime',
             'phone_verified_at' => 'datetime',
             'two_factor_enabled' => 'boolean',
             'password' => 'hashed',
         ];
+    }
+
+    public function country()
+    {
+        return $this->belongsTo(Country::class);
+    }
+
+    public function state()
+    {
+        return $this->belongsTo(State::class);
     }
 
     /**
@@ -69,6 +83,10 @@ class User extends Authenticatable
             'name'               => $this->name,
             'email'              => $this->email,
             'phone'              => $this->phone,
+            'country_id'         => $this->country_id ? (int)$this->country_id : null,
+            'state_id'           => $this->state_id ? (int)$this->state_id : null,
+            'country_name'       => $this->country?->name,
+            'state_name'         => $this->state?->name,
             'phone_verified_at'  => $this->phone_verified_at?->toISOString(),
             'avatar_url'         => $avatarUrl,
             'email_verified_at'  => $this->email_verified_at?->toISOString(),

@@ -13,17 +13,21 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|min:2|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'phone' => 'nullable|string|max:32',
-            'password' => 'required|string|min:8',
+            'name'       => 'required|string|min:2|max:255',
+            'email'      => 'required|string|email|max:255|unique:users',
+            'phone'      => 'nullable|string|max:32',
+            'country_id' => 'required|integer|exists:countries,id',
+            'state_id'   => 'required|integer|exists:states,id',
+            'password'   => 'required|string|min:8',
         ]);
 
         $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'phone' => $validated['phone'] ?? null,
-            'password' => Hash::make($validated['password']),
+            'name'       => $validated['name'],
+            'email'      => $validated['email'],
+            'phone'      => $validated['phone'] ?? null,
+            'country_id' => $validated['country_id'],
+            'state_id'   => $validated['state_id'],
+            'password'   => Hash::make($validated['password']),
         ]);
 
         Auth::login($user);
@@ -116,8 +120,10 @@ class AuthController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|min:2|max:255',
-            'phone' => 'nullable|string|max:32',
+            'name'       => 'sometimes|required|string|min:2|max:255',
+            'phone'      => 'nullable|string|max:32',
+            'country_id' => 'nullable|integer|exists:countries,id',
+            'state_id'   => 'nullable|integer|exists:states,id',
         ]);
 
         if (isset($validated['name'])) {
@@ -125,6 +131,12 @@ class AuthController extends Controller
         }
         if (array_key_exists('phone', $validated)) {
             $user->phone = $validated['phone'];
+        }
+        if (array_key_exists('country_id', $validated)) {
+            $user->country_id = $validated['country_id'];
+        }
+        if (array_key_exists('state_id', $validated)) {
+            $user->state_id = $validated['state_id'];
         }
 
         $user->save();
