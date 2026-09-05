@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Engagement;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -152,12 +153,12 @@ class EngagementController extends Controller
                 'status'        => $c->status,
                 'is_pinned'     => (bool)$c->is_pinned,
                 'is_hearted'    => (bool)$c->is_hearted,
-                'hearted_at'    => $c->hearted_at,
-                'edited_at'     => $c->edited_at,
+                'hearted_at'    => $c->hearted_at ? Carbon::parse($c->hearted_at)->toISOString() : null,
+                'edited_at'     => $c->edited_at ? Carbon::parse($c->edited_at)->toISOString() : null,
                 'replies_count' => (int)$repliesCount,
                 'is_mine'       => $currentUserId === (int)$c->user_id,
-                'created_at'    => $c->created_at,
-                'updated_at'    => $c->updated_at,
+                'created_at'    => $c->created_at ? Carbon::parse($c->created_at)->toISOString() : now()->toISOString(),
+                'updated_at'    => $c->updated_at ? Carbon::parse($c->updated_at)->toISOString() : now()->toISOString(),
             ];
         })->toArray();
 
@@ -268,12 +269,12 @@ class EngagementController extends Controller
                 'status'        => $c->status,
                 'is_pinned'     => (bool)$c->is_pinned,
                 'is_hearted'    => (bool)$c->is_hearted,
-                'hearted_at'    => $c->hearted_at,
-                'edited_at'     => $c->edited_at,
+                'hearted_at'    => $c->hearted_at ? Carbon::parse($c->hearted_at)->toISOString() : null,
+                'edited_at'     => $c->edited_at ? Carbon::parse($c->edited_at)->toISOString() : null,
                 'replies_count' => 0,
                 'is_mine'       => $currentUserId === (int)$c->user_id,
-                'created_at'    => $c->created_at,
-                'updated_at'    => $c->updated_at,
+                'created_at'    => $c->created_at ? Carbon::parse($c->created_at)->toISOString() : now()->toISOString(),
+                'updated_at'    => $c->updated_at ? Carbon::parse($c->updated_at)->toISOString() : now()->toISOString(),
             ];
         })->toArray();
 
@@ -322,10 +323,10 @@ class EngagementController extends Controller
                 'status'     => $comment->status,
                 'is_pinned'  => (bool)$comment->is_pinned,
                 'is_hearted' => (bool)$comment->is_hearted,
-                'hearted_at' => $comment->hearted_at,
+                'hearted_at' => $comment->hearted_at ? Carbon::parse($comment->hearted_at)->toISOString() : null,
                 'edited_at'  => now()->toISOString(),
                 'is_mine'    => true,
-                'created_at' => $comment->created_at,
+                'created_at' => $comment->created_at ? Carbon::parse($comment->created_at)->toISOString() : now()->toISOString(),
                 'updated_at' => now()->toISOString(),
             ],
             'meta'   => null,
