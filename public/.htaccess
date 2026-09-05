@@ -12,9 +12,6 @@
 
     RewriteEngine On
 
-    # Intercept and fast-reply to CORS preflight OPTIONS requests
-    RewriteCond %{REQUEST_METHOD} OPTIONS
-    RewriteRule ^(.*)$ $1 [R=204,L]
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
