@@ -157,7 +157,16 @@ return [
     |
     */
 
-    'domain' => env('SESSION_DOMAIN', (isset($_SERVER['HTTP_HOST']) && str_contains($_SERVER['HTTP_HOST'], 'sikaa.online')) ? '.sikaa.online' : null),
+    'domain' => (function() {
+        $envDomain = env('SESSION_DOMAIN');
+        if (!empty($envDomain) && $envDomain !== 'null') {
+            return $envDomain;
+        }
+        if (isset($_SERVER['HTTP_HOST']) && str_contains($_SERVER['HTTP_HOST'], 'sikaa.online')) {
+            return '.sikaa.online';
+        }
+        return null;
+    })(),
 
     /*
     |--------------------------------------------------------------------------
