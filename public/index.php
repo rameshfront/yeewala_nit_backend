@@ -35,6 +35,22 @@ if (isset($_GET['cache_bust_clear'])) {
     exit;
 }
 
+if (isset($_GET['check_version'])) {
+    require __DIR__.'/../vendor/autoload.php';
+    $app = require_once __DIR__.'/../bootstrap/app.php';
+    $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+    header('Content-Type: application/json');
+    echo json_encode([
+        'git_head' => @file_get_contents(__DIR__.'/../.git/HEAD') ?: 'no-git-dir',
+        'session_domain' => config('session.domain'),
+        'session_same_site' => config('session.same_site'),
+        'session_secure' => config('session.secure'),
+        'sanctum_stateful' => config('sanctum.stateful'),
+        'cors_origins' => config('cors.allowed_origins'),
+    ]);
+    exit;
+}
+
 // Register the Composer autoloader...
 require __DIR__.'/../vendor/autoload.php';
 
