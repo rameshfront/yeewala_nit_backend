@@ -9,7 +9,6 @@ return [
         'https://sikaa.online',
         'https://www.sikaa.online',
         'https://api.sikaa.online',
-        'https://papayawhip-dotterel-898881.hostingersite.com',
         rtrim(env('FRONTEND_URL', ''), '/'),
     ]))),
     'allowed_origins_patterns' => [],
