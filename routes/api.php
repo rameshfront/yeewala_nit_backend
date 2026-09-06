@@ -69,6 +69,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::get('/wallet', [WalletController::class, 'getMyWallet']);
     Route::get('/wallet/balances', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'getWalletBalances']);
     Route::post('/wallet/topups', [WalletController::class, 'topUp']);
+    Route::post('/wallet/topups/{id}/verify', [WalletController::class, 'verifyTopUp']);
     Route::get('/me/purchased-videos', [WalletController::class, 'listPurchasedVideos']);
     Route::get('/orders', [OrderController::class, 'index']);
     Route::get('/orders/{id}', [OrderController::class, 'show']);
