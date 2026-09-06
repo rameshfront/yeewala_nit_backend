@@ -179,7 +179,7 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE', true),
+    'secure' => (isset($_SERVER['HTTP_HOST']) && str_contains($_SERVER['HTTP_HOST'], 'sikaa.online')) ? true : env('SESSION_SECURE_COOKIE', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -209,7 +209,7 @@ return [
     |
     */
 
-    'same_site' => env('SESSION_SAME_SITE', 'lax'),
+    'same_site' => (isset($_SERVER['HTTP_HOST']) && str_contains($_SERVER['HTTP_HOST'], 'sikaa.online')) ? 'none' : env('SESSION_SAME_SITE', 'lax'),
 
     /*
     |--------------------------------------------------------------------------
