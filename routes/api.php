@@ -26,164 +26,194 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::get('/countries', [LocationController::class, 'countries']);
     Route::get('/countries/{countryId}/states', [LocationController::class, 'states']);
 
-    // Admin Settings, Locations, Dashboard & Audit Logs
-    Route::get('/admin/settings', [SettingsController::class, 'index']);
-    Route::patch('/admin/settings/{group}', [SettingsController::class, 'update']);
-    Route::get('/admin/dashboard', [AdminDashboardController::class, 'getDashboard']);
-    Route::get('/admin/audit-logs', [AdminAuditLogController::class, 'index']);
+    // ── Admin Routes (auth + role protected) ──────────────────────
+    Route::middleware(['auth:sanctum'])->group(function () {
+        // Admin Settings, Dashboard & Audit Logs
+        Route::get('/admin/settings', [SettingsController::class, 'index']);
+        Route::patch('/admin/settings/{group}', [SettingsController::class, 'update']);
+        Route::get('/admin/dashboard', [AdminDashboardController::class, 'getDashboard']);
+        Route::get('/admin/audit-logs', [AdminAuditLogController::class, 'index']);
 
-    // Admin Users
-    Route::get('/admin/users', [AdminUserController::class, 'index']);
-    Route::get('/admin/users/{id}', [AdminUserController::class, 'show']);
-    Route::patch('/admin/users/{id}/suspend', [AdminUserController::class, 'suspend']);
-    Route::patch('/admin/users/{id}/ban', [AdminUserController::class, 'ban']);
-    Route::patch('/admin/users/{id}/reactivate', [AdminUserController::class, 'reactivate']);
-    Route::post('/admin/users/{id}/reset-password', [AdminUserController::class, 'resetPassword']);
-    Route::get('/admin/users/{id}/sessions', [AdminUserController::class, 'sessions']);
-    Route::delete('/admin/users/{id}/sessions', [AdminUserController::class, 'resetPassword']);
-    Route::get('/admin/users/{id}/wallet', [AdminUserController::class, 'wallet']);
-    Route::get('/admin/users/{id}/wallet/transactions', [AdminUserController::class, 'walletTransactions']);
-    Route::post('/admin/users/{id}/wallet/adjust', [AdminUserController::class, 'adjustWallet']);
+        // Admin Users
+        Route::get('/admin/users', [AdminUserController::class, 'index']);
+        Route::get('/admin/users/{id}', [AdminUserController::class, 'show']);
+        Route::patch('/admin/users/{id}/suspend', [AdminUserController::class, 'suspend']);
+        Route::patch('/admin/users/{id}/ban', [AdminUserController::class, 'ban']);
+        Route::patch('/admin/users/{id}/reactivate', [AdminUserController::class, 'reactivate']);
+        Route::post('/admin/users/{id}/reset-password', [AdminUserController::class, 'resetPassword']);
+        Route::get('/admin/users/{id}/sessions', [AdminUserController::class, 'sessions']);
+        Route::delete('/admin/users/{id}/sessions', [AdminUserController::class, 'resetPassword']);
+        Route::get('/admin/users/{id}/wallet', [AdminUserController::class, 'wallet']);
+        Route::get('/admin/users/{id}/wallet/transactions', [AdminUserController::class, 'walletTransactions']);
+        Route::post('/admin/users/{id}/wallet/adjust', [AdminUserController::class, 'adjustWallet']);
 
-    // Admin Creators
-    Route::get('/admin/creators', [AdminCreatorController::class, 'index']);
-    Route::get('/admin/creators/{id}', [AdminCreatorController::class, 'show']);
-    Route::get('/admin/creators/{id}/kyc-documents', [AdminCreatorController::class, 'kycDocuments']);
-    Route::get('/admin/creators/{id}/bank-details', [AdminCreatorController::class, 'bankDetails']);
-    Route::get('/admin/creators/{id}/earnings', [AdminCreatorController::class, 'earnings']);
+        // Admin Creators
+        Route::get('/admin/creators', [AdminCreatorController::class, 'index']);
+        Route::get('/admin/creators/{id}', [AdminCreatorController::class, 'show']);
+        Route::get('/admin/creators/{id}/kyc-documents', [AdminCreatorController::class, 'kycDocuments']);
+        Route::get('/admin/creators/{id}/bank-details', [AdminCreatorController::class, 'bankDetails']);
+        Route::get('/admin/creators/{id}/earnings', [AdminCreatorController::class, 'earnings']);
 
-    // Admin Videos (Content Management)
-    Route::get('/admin/videos', [AdminVideoController::class, 'index']);
-    Route::get('/admin/videos/{id}', [AdminVideoController::class, 'show']);
-    Route::patch('/admin/videos/{id}/approve', [AdminVideoController::class, 'approve']);
-    Route::patch('/admin/videos/{id}/reject', [AdminVideoController::class, 'reject']);
-    Route::patch('/admin/videos/{id}/request-changes', [AdminVideoController::class, 'requestChanges']);
-    Route::patch('/admin/videos/{id}/publish', [AdminVideoController::class, 'publish']);
-    Route::patch('/admin/videos/{id}/feature', [AdminVideoController::class, 'feature']);
-    Route::patch('/admin/videos/{id}/unfeature', [AdminVideoController::class, 'unfeature']);
-    Route::patch('/admin/videos/{id}/hide', [AdminVideoController::class, 'hide']);
-    Route::patch('/admin/videos/{id}/unhide', [AdminVideoController::class, 'unhide']);
-    Route::delete('/admin/videos/{id}', [AdminVideoController::class, 'destroy']);
-    Route::patch('/admin/videos/{id}/restore', [AdminVideoController::class, 'restore']);
-    Route::delete('/admin/videos/{id}/force', [AdminVideoController::class, 'forceDelete']);
+        // Admin Videos (Content Management)
+        Route::get('/admin/videos', [AdminVideoController::class, 'index']);
+        Route::get('/admin/videos/{id}', [AdminVideoController::class, 'show']);
+        Route::patch('/admin/videos/{id}/approve', [AdminVideoController::class, 'approve']);
+        Route::patch('/admin/videos/{id}/reject', [AdminVideoController::class, 'reject']);
+        Route::patch('/admin/videos/{id}/request-changes', [AdminVideoController::class, 'requestChanges']);
+        Route::patch('/admin/videos/{id}/publish', [AdminVideoController::class, 'publish']);
+        Route::patch('/admin/videos/{id}/feature', [AdminVideoController::class, 'feature']);
+        Route::patch('/admin/videos/{id}/unfeature', [AdminVideoController::class, 'unfeature']);
+        Route::patch('/admin/videos/{id}/hide', [AdminVideoController::class, 'hide']);
+        Route::patch('/admin/videos/{id}/unhide', [AdminVideoController::class, 'unhide']);
+        Route::delete('/admin/videos/{id}', [AdminVideoController::class, 'destroy']);
+        Route::patch('/admin/videos/{id}/restore', [AdminVideoController::class, 'restore']);
+        Route::delete('/admin/videos/{id}/force', [AdminVideoController::class, 'forceDelete']);
 
-    // Admin Moderation (Reports & Comments)
-    Route::get('/admin/reports', [AdminModerationController::class, 'reports']);
-    Route::patch('/admin/reports/{id}/status', [AdminModerationController::class, 'updateReportStatus']);
-    Route::get('/admin/comments', [AdminModerationController::class, 'comments']);
-    Route::patch('/admin/comments/{id}/status', [AdminModerationController::class, 'updateCommentStatus']);
-    Route::delete('/admin/comments/{id}', [AdminModerationController::class, 'deleteComment']);
-    Route::patch('/admin/comments/{id}/restore', [AdminModerationController::class, 'restoreComment']);
-    Route::post('/admin/comments/{id}/warn', [AdminModerationController::class, 'warnCommentAuthor']);
+        // Admin Moderation (Reports & Comments)
+        Route::get('/admin/reports', [AdminModerationController::class, 'reports']);
+        Route::patch('/admin/reports/{id}/status', [AdminModerationController::class, 'updateReportStatus']);
+        Route::get('/admin/comments', [AdminModerationController::class, 'comments']);
+        Route::patch('/admin/comments/{id}/status', [AdminModerationController::class, 'updateCommentStatus']);
+        Route::delete('/admin/comments/{id}', [AdminModerationController::class, 'deleteComment']);
+        Route::patch('/admin/comments/{id}/restore', [AdminModerationController::class, 'restoreComment']);
+        Route::post('/admin/comments/{id}/warn', [AdminModerationController::class, 'warnCommentAuthor']);
 
-    // Admin Monetization & Withdrawals
-    Route::get('/admin/withdrawals', [AdminMonetizationController::class, 'withdrawals']);
-    Route::patch('/admin/withdrawals/{id}/approve', [AdminMonetizationController::class, 'approveWithdrawal']);
-    Route::patch('/admin/withdrawals/{id}/reject', [AdminMonetizationController::class, 'rejectWithdrawal']);
-    Route::patch('/admin/withdrawals/{id}/process', [AdminMonetizationController::class, 'processWithdrawal']);
-    Route::patch('/admin/withdrawals/{id}/mark-paid', [AdminMonetizationController::class, 'markWithdrawalPaid']);
-    Route::get('/admin/wallet-topups', [AdminMonetizationController::class, 'topups']);
-    Route::post('/admin/wallet-topups/{id}/approve', [AdminMonetizationController::class, 'approveTopup']);
-    Route::post('/admin/wallet-topups/{id}/reject', [AdminMonetizationController::class, 'rejectTopup']);
-    Route::get('/admin/coupons', [AdminMonetizationController::class, 'coupons']);
-    Route::post('/admin/coupons', [AdminMonetizationController::class, 'storeCoupon']);
+        // Admin Monetization & Withdrawals
+        Route::get('/admin/withdrawals', [AdminMonetizationController::class, 'withdrawals']);
+        Route::patch('/admin/withdrawals/{id}/approve', [AdminMonetizationController::class, 'approveWithdrawal']);
+        Route::patch('/admin/withdrawals/{id}/reject', [AdminMonetizationController::class, 'rejectWithdrawal']);
+        Route::patch('/admin/withdrawals/{id}/process', [AdminMonetizationController::class, 'processWithdrawal']);
+        Route::patch('/admin/withdrawals/{id}/mark-paid', [AdminMonetizationController::class, 'markWithdrawalPaid']);
+        Route::get('/admin/wallet-topups', [AdminMonetizationController::class, 'topups']);
+        Route::post('/admin/wallet-topups/{id}/approve', [AdminMonetizationController::class, 'approveTopup']);
+        Route::post('/admin/wallet-topups/{id}/reject', [AdminMonetizationController::class, 'rejectTopup']);
+        Route::get('/admin/coupons', [AdminMonetizationController::class, 'coupons']);
+        Route::post('/admin/coupons', [AdminMonetizationController::class, 'storeCoupon']);
 
-    Route::get('/admin/countries', [AdminLocationController::class, 'listCountries']);
-    Route::post('/admin/countries', [AdminLocationController::class, 'storeCountry']);
-    Route::get('/admin/countries/{id}', [AdminLocationController::class, 'showCountry']);
-    Route::match(['put', 'patch'], '/admin/countries/{id}', [AdminLocationController::class, 'updateCountry']);
-    Route::delete('/admin/countries/{id}', [AdminLocationController::class, 'destroyCountry']);
+        Route::get('/admin/countries', [AdminLocationController::class, 'listCountries']);
+        Route::post('/admin/countries', [AdminLocationController::class, 'storeCountry']);
+        Route::get('/admin/countries/{id}', [AdminLocationController::class, 'showCountry']);
+        Route::match(['put', 'patch'], '/admin/countries/{id}', [AdminLocationController::class, 'updateCountry']);
+        Route::delete('/admin/countries/{id}', [AdminLocationController::class, 'destroyCountry']);
 
-    Route::get('/admin/states', [AdminLocationController::class, 'listStates']);
-    Route::post('/admin/states', [AdminLocationController::class, 'storeState']);
-    Route::get('/admin/states/{id}', [AdminLocationController::class, 'showState']);
-    Route::match(['put', 'patch'], '/admin/states/{id}', [AdminLocationController::class, 'updateState']);
-    Route::delete('/admin/states/{id}', [AdminLocationController::class, 'destroyState']);
+        Route::get('/admin/states', [AdminLocationController::class, 'listStates']);
+        Route::post('/admin/states', [AdminLocationController::class, 'storeState']);
+        Route::get('/admin/states/{id}', [AdminLocationController::class, 'showState']);
+        Route::match(['put', 'patch'], '/admin/states/{id}', [AdminLocationController::class, 'updateState']);
+        Route::delete('/admin/states/{id}', [AdminLocationController::class, 'destroyState']);
+    });
 
+
+    // ── Public Auth Routes (User) ─────────────────────────────────
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/auth/password/forgot', [AuthController::class, 'forgotPassword']);
+    Route::post('/auth/password/reset', [AuthController::class, 'resetPassword']);
     Route::post('/auth/google', [GoogleAuthController::class, 'authWithGoogle']);
     Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirectToGoogle']);
     Route::get('/auth/google/callback', [GoogleAuthController::class, 'handleGoogleCallback']);
-    Route::post('/auth/logout', [AuthController::class, 'logout']);
-    Route::get('/me', [AuthController::class, 'me']);
-    Route::patch('/me', [AuthController::class, 'updateProfile']);
-    Route::post('/me/avatar', [AuthController::class, 'updateAvatar']);
 
-    // Email & Phone Verification Routes
-    Route::post('/auth/email/resend', [AuthController::class, 'resendVerificationEmail']);
+    // ── Public Admin Auth Routes ──────────────────────────────────
+    Route::post('/admin/auth/login', [AuthController::class, 'adminLogin']);
+    Route::post('/admin/auth/password/forgot', [AuthController::class, 'adminForgotPassword']);
+    Route::post('/admin/auth/password/reset', [AuthController::class, 'adminResetPassword']);
+
+    // Email verification (public, uses signed URL hash)
     Route::get('/auth/verify-email/{id}/{hash}', [AuthController::class, 'verifyEmail']);
     Route::get('/auth/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail']);
-    Route::post('/auth/phone/send-code', [AuthController::class, 'sendPhoneVerificationCode']);
-    Route::post('/auth/phone/verify', [AuthController::class, 'verifyPhoneCode']);
 
+    // ── Public Content Routes ─────────────────────────────────────
     Route::get('/videos', [VideoController::class, 'index']);
-    Route::get('/videos/mine', [VideoController::class, 'myVideos']);
     Route::get('/videos/{id}', [VideoController::class, 'show']);
     Route::get('/feed/home', [VideoController::class, 'homeFeed']);
     Route::get('/feed/trending', [VideoController::class, 'trendingFeed']);
     Route::get('/feed/latest', [VideoController::class, 'latestFeed']);
     Route::get('/feed/recommended', [VideoController::class, 'recommendedFeed']);
-    Route::get('/feed/following', [VideoController::class, 'followingFeed']);
-    Route::get('/feed/continue-watching', [VideoController::class, 'continueWatching']);
-    Route::get('/notifications', [VideoController::class, 'notifications']);
-
-    // Wallet & Video Purchases
-    Route::get('/wallet', [WalletController::class, 'getMyWallet']);
-    Route::get('/wallet/balances', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'getWalletBalances']);
-    Route::post('/wallet/topups', [WalletController::class, 'topUp']);
-    Route::post('/wallet/topups/{id}/verify', [WalletController::class, 'verifyTopUp']);
-    Route::get('/me/purchased-videos', [WalletController::class, 'listPurchasedVideos']);
-    Route::get('/orders', [OrderController::class, 'index']);
-    Route::get('/orders/{id}', [OrderController::class, 'show']);
-    Route::get('/orders/{id}/status', [OrderController::class, 'status']);
-    Route::post('/wallet/videos/{id}/purchase', [WalletController::class, 'purchaseVideo']);
-    Route::post('/wallet/purchase', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'purchaseVideos']);
-    Route::post('/wallet/withdraw', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'requestWithdrawal']);
-    Route::post('/admin/users/{userId}/wallet/credit', [WalletController::class, 'adminCreditWallet']);
-    Route::post('/admin/wallet/approve-earnings', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'approveEarnings']);
-    Route::post('/admin/wallet/withdrawals/{id}/approve', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'approveWithdrawal']);
-    Route::post('/admin/wallet/withdrawals/{id}/reject', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'rejectWithdrawal']);
-    Route::post('/admin/wallet/approve-recharge', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'approveRecharge']);
-
-    // Creator Profile & Channel Pages
-    Route::get('/creator/dashboard', [CreatorController::class, 'getDashboard']);
-    Route::get('/creator/profile', [CreatorController::class, 'getProfile']);
-    Route::get('/creator/analytics/videos', [CreatorAnalyticsController::class, 'videos']);
-    Route::get('/creator/analytics/overview', [CreatorAnalyticsController::class, 'overview']);
-    Route::get('/creator/analytics/trends', [CreatorAnalyticsController::class, 'trends']);
-    Route::get('/creator/analytics/videos/top', [CreatorAnalyticsController::class, 'topVideos']);
-    Route::get('/creator/analytics/breakdown', [CreatorAnalyticsController::class, 'breakdown']);
-    Route::get('/creator/analytics/search-keywords', [CreatorAnalyticsController::class, 'searchKeywords']);
-    Route::get('/me/following', [CreatorController::class, 'listFollowing']);
-    Route::get('/me/followers', [CreatorController::class, 'listFollowers']);
     Route::get('/creators/{id}', [CreatorController::class, 'show']);
     Route::get('/creators/{id}/videos', [CreatorController::class, 'getCreatorVideos']);
-    Route::post('/creators/{id}/follow', [CreatorController::class, 'follow']);
-    Route::delete('/creators/{id}/follow', [CreatorController::class, 'unfollow']);
 
-    // Search Routes
+    // Search Routes (public)
     Route::get('/search/videos', [VideoController::class, 'searchVideos']);
     Route::get('/search/creators', [VideoController::class, 'searchCreators']);
     Route::get('/search/categories', [VideoController::class, 'searchCategories']);
     Route::get('/search/tags', [VideoController::class, 'searchTags']);
+    Route::get('/categories', [VideoController::class, 'searchCategories']);
+    Route::get('/tags', [VideoController::class, 'searchTags']);
 
-    // Watch History Routes
-    Route::get('/me/history', [HistoryController::class, 'index']);
-    Route::delete('/me/history/{videoId}', [HistoryController::class, 'destroy']);
-    Route::delete('/me/history', [HistoryController::class, 'clear']);
-    Route::put('/videos/{videoId}/progress', [HistoryController::class, 'syncProgress']);
-
-    // Video Reactions & Engagement
-    Route::get('/videos/{id}/reaction', [EngagementController::class, 'getReaction']);
-    Route::put('/videos/{id}/reaction', [EngagementController::class, 'setReaction'])->middleware('auth:sanctum');
-
-    // Video Comments
+    // Video Comments (reading is public)
     Route::get('/videos/{id}/comments', [EngagementController::class, 'listComments']);
-    Route::post('/videos/{id}/comments', [EngagementController::class, 'postComment'])->middleware('auth:sanctum');
-    Route::patch('/comments/{id}', [EngagementController::class, 'updateComment'])->middleware('auth:sanctum');
-    Route::delete('/comments/{id}', [EngagementController::class, 'deleteComment'])->middleware('auth:sanctum');
     Route::get('/comments/{id}/replies', [EngagementController::class, 'listReplies']);
-    Route::patch('/comments/{id}/heart', [EngagementController::class, 'heartComment'])->middleware('auth:sanctum');
-    Route::patch('/comments/{id}/pin', [EngagementController::class, 'pinComment'])->middleware('auth:sanctum');
+    Route::get('/videos/{id}/reaction', [EngagementController::class, 'getReaction']);
+
+    // ── Authenticated User Routes ─────────────────────────────────
+    Route::middleware(['auth:sanctum'])->group(function () {
+        // Auth session
+        Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::post('/admin/auth/logout', [AuthController::class, 'adminLogout']);
+        Route::get('/me', [AuthController::class, 'me']);
+        Route::patch('/me', [AuthController::class, 'updateProfile']);
+        Route::post('/me/avatar', [AuthController::class, 'updateAvatar']);
+
+        // Email & Phone Verification (needs auth)
+        Route::post('/auth/email/resend', [AuthController::class, 'resendVerificationEmail']);
+        Route::post('/auth/phone/send-code', [AuthController::class, 'sendPhoneVerificationCode']);
+        Route::post('/auth/phone/verify', [AuthController::class, 'verifyPhoneCode']);
+
+        // Notifications
+        Route::get('/notifications', [VideoController::class, 'notifications']);
+
+        // Feed routes that need auth
+        Route::get('/feed/following', [VideoController::class, 'followingFeed']);
+        Route::get('/feed/continue-watching', [VideoController::class, 'continueWatching']);
+        Route::get('/videos/mine', [VideoController::class, 'myVideos']);
+
+        // Wallet & Video Purchases
+        Route::get('/wallet', [WalletController::class, 'getMyWallet']);
+        Route::get('/wallet/balances', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'getWalletBalances']);
+        Route::post('/wallet/topups', [WalletController::class, 'topUp']);
+        Route::post('/wallet/topups/{id}/verify', [WalletController::class, 'verifyTopUp']);
+        Route::get('/me/purchased-videos', [WalletController::class, 'listPurchasedVideos']);
+        Route::get('/orders', [OrderController::class, 'index']);
+        Route::get('/orders/{id}', [OrderController::class, 'show']);
+        Route::get('/orders/{id}/status', [OrderController::class, 'status']);
+        Route::post('/wallet/videos/{id}/purchase', [WalletController::class, 'purchaseVideo']);
+        Route::post('/wallet/purchase', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'purchaseVideos']);
+        Route::post('/wallet/withdraw', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'requestWithdrawal']);
+
+        // Creator Profile & Channel Pages (auth needed)
+        Route::get('/creator/dashboard', [CreatorController::class, 'getDashboard']);
+        Route::get('/creator/profile', [CreatorController::class, 'getProfile']);
+        Route::get('/creator/analytics/videos', [CreatorAnalyticsController::class, 'videos']);
+        Route::get('/creator/analytics/overview', [CreatorAnalyticsController::class, 'overview']);
+        Route::get('/creator/analytics/trends', [CreatorAnalyticsController::class, 'trends']);
+        Route::get('/creator/analytics/videos/top', [CreatorAnalyticsController::class, 'topVideos']);
+        Route::get('/creator/analytics/breakdown', [CreatorAnalyticsController::class, 'breakdown']);
+        Route::get('/creator/analytics/search-keywords', [CreatorAnalyticsController::class, 'searchKeywords']);
+        Route::get('/me/following', [CreatorController::class, 'listFollowing']);
+        Route::get('/me/followers', [CreatorController::class, 'listFollowers']);
+        Route::post('/creators/{id}/follow', [CreatorController::class, 'follow']);
+        Route::delete('/creators/{id}/follow', [CreatorController::class, 'unfollow']);
+
+        // Watch History Routes
+        Route::get('/me/history', [HistoryController::class, 'index']);
+        Route::delete('/me/history/{videoId}', [HistoryController::class, 'destroy']);
+        Route::delete('/me/history', [HistoryController::class, 'clear']);
+        Route::put('/videos/{videoId}/progress', [HistoryController::class, 'syncProgress']);
+
+        // Video Engagement (write operations need auth)
+        Route::put('/videos/{id}/reaction', [EngagementController::class, 'setReaction']);
+        Route::post('/videos/{id}/comments', [EngagementController::class, 'postComment']);
+        Route::patch('/comments/{id}', [EngagementController::class, 'updateComment']);
+        Route::delete('/comments/{id}', [EngagementController::class, 'deleteComment']);
+        Route::patch('/comments/{id}/heart', [EngagementController::class, 'heartComment']);
+        Route::patch('/comments/{id}/pin', [EngagementController::class, 'pinComment']);
+
+        // Admin wallet operations (inside auth, controllers check admin role internally)
+        Route::post('/admin/users/{userId}/wallet/credit', [WalletController::class, 'adminCreditWallet']);
+        Route::post('/admin/wallet/approve-earnings', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'approveEarnings']);
+        Route::post('/admin/wallet/withdrawals/{id}/approve', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'approveWithdrawal']);
+        Route::post('/admin/wallet/withdrawals/{id}/reject', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'rejectWithdrawal']);
+        Route::post('/admin/wallet/approve-recharge', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'approveRecharge']);
+    });
 });
+

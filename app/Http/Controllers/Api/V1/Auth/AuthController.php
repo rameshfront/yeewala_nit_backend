@@ -6,7 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class AuthController extends Controller
 {
@@ -56,11 +60,83 @@ class AuthController extends Controller
             ], 401);
         }
 
+        /** @var User $user */
+        $user = Auth::user();
+        $roles = $user->getRoleNames();
+
+        // STRICT SEPARATION: Admin users cannot log in through user portal
+        if (in_array('admin', $roles) && !in_array('user', $roles)) {
+            Auth::guard('web')->logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    [
+                        'code' => 'ADMIN_PORTAL_REQUIRED',
+                        'message' => 'Administrator accounts cannot sign in through the user portal. Please sign in via the Admin Portal at /admin/login.',
+                    ]
+                ]
+            ], 403);
+        }
+
         if ($request->hasSession()) {
             $request->session()->regenerate();
         }
+
+        return response()->json([
+            'data' => $user->formatForFrontend(),
+            'meta' => null,
+            'errors' => null
+        ]);
+    }
+
+    public function adminLogin(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => 'required|string',
+            'password' => 'required|string',
+        ]);
+
+        if (!Auth::attempt($credentials)) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'INVALID_CREDENTIALS', 'message' => 'Invalid email or password']
+                ]
+            ], 401);
+        }
+
         /** @var User $user */
         $user = Auth::user();
+        $roles = $user->getRoleNames();
+
+        // STRICT SEPARATION: Only admins can log in to admin portal
+        if (!in_array('admin', $roles)) {
+            Auth::guard('web')->logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    [
+                        'code' => 'ADMIN_ACCESS_DENIED',
+                        'message' => 'Access denied. This portal is strictly restricted to platform administrators.',
+                    ]
+                ]
+            ], 403);
+        }
+
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
 
         return response()->json([
             'data' => $user->formatForFrontend(),
@@ -70,6 +146,21 @@ class AuthController extends Controller
     }
 
     public function logout(Request $request)
+    {
+        Auth::guard('web')->logout();
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
+
+        return response()->json([
+            'data' => true,
+            'meta' => null,
+            'errors' => null
+        ]);
+    }
+
+    public function adminLogout(Request $request)
     {
         Auth::guard('web')->logout();
         if ($request->hasSession()) {
@@ -341,6 +432,216 @@ class AuthController extends Controller
             'meta' => null,
             'errors' => [['code' => 'INVALID_CODE', 'message' => 'Incorrect verification code. Please check and try again.']]
         ], 422);
+    }
+
+    /**
+     * User Forgot Password (strictly for regular users)
+     */
+    public function forgotPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email|max:255',
+        ]);
+
+        $user = User::where('email', $validated['email'])->first();
+
+        // If user is found and is ONLY an admin, redirect them to admin reset
+        if ($user) {
+            $roles = $user->getRoleNames();
+            if (in_array('admin', $roles) && !in_array('user', $roles)) {
+                return response()->json([
+                    'data' => null,
+                    'meta' => null,
+                    'errors' => [
+                        [
+                            'code' => 'ADMIN_ACCOUNT',
+                            'message' => 'This email belongs to an administrator account. Please use the Admin Password Reset at /admin/forgot-password.',
+                        ]
+                    ]
+                ], 422);
+            }
+
+            $token = Str::random(60);
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email' => $user->email],
+                [
+                    'token' => Hash::make($token),
+                    'created_at' => now(),
+                ]
+            );
+
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+            $resetUrl = rtrim($frontendUrl, '/') . '/reset-password?token=' . urlencode($token) . '&email=' . urlencode($user->email);
+            Log::info("User Password Reset Link generated for [{$user->email}]: {$resetUrl}");
+        }
+
+        return response()->json([
+            'data' => [
+                'sent' => true,
+                'message' => 'If an account exists with that email, a password reset link has been sent.',
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Admin Forgot Password (strictly for admin accounts)
+     */
+    public function adminForgotPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email|max:255',
+        ]);
+
+        $user = User::where('email', $validated['email'])->first();
+
+        if (!$user || !in_array('admin', $user->getRoleNames())) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    [
+                        'code' => 'NOT_AN_ADMIN',
+                        'message' => 'No administrator account found with this email address.',
+                    ]
+                ]
+            ], 404);
+        }
+
+        $token = Str::random(60);
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $user->email],
+            [
+                'token' => Hash::make($token),
+                'created_at' => now(),
+            ]
+        );
+
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+        $resetUrl = rtrim($frontendUrl, '/') . '/admin/reset-password?token=' . urlencode($token) . '&email=' . urlencode($user->email);
+        Log::info("Admin Password Reset Link generated for [{$user->email}]: {$resetUrl}");
+
+        return response()->json([
+            'data' => [
+                'sent' => true,
+                'message' => 'Admin password reset link has been sent to your email.',
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * User Reset Password
+     */
+    public function resetPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email'                 => 'required|email',
+            'token'                 => 'required|string',
+            'password'              => 'required|string|min:8|confirmed',
+            'password_confirmation' => 'required|string|min:8',
+        ]);
+
+        $record = DB::table('password_reset_tokens')->where('email', $validated['email'])->first();
+
+        if (!$record || !Hash::check($validated['token'], $record->token)) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'INVALID_TOKEN', 'message' => 'Invalid or expired password reset token.']
+                ]
+            ], 422);
+        }
+
+        if (Carbon::parse($record->created_at)->addMinutes(60)->isPast()) {
+            DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'EXPIRED_TOKEN', 'message' => 'This password reset link has expired. Please request a new one.']
+                ]
+            ], 422);
+        }
+
+        $user = User::where('email', $validated['email'])->first();
+        if (!$user) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'User account not found.']]
+            ], 404);
+        }
+
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+
+        return response()->json([
+            'data' => ['reset' => true, 'message' => 'Password reset successfully. You can now sign in.'],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Admin Reset Password (strictly for admin accounts)
+     */
+    public function adminResetPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email'                 => 'required|email',
+            'token'                 => 'required|string',
+            'password'              => 'required|string|min:8|confirmed',
+            'password_confirmation' => 'required|string|min:8',
+        ]);
+
+        $record = DB::table('password_reset_tokens')->where('email', $validated['email'])->first();
+
+        if (!$record || !Hash::check($validated['token'], $record->token)) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'INVALID_TOKEN', 'message' => 'Invalid or expired administrator reset token.']
+                ]
+            ], 422);
+        }
+
+        if (Carbon::parse($record->created_at)->addMinutes(60)->isPast()) {
+            DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'EXPIRED_TOKEN', 'message' => 'This admin reset link has expired. Please request a new one.']
+                ]
+            ], 422);
+        }
+
+        $user = User::where('email', $validated['email'])->first();
+        if (!$user || !in_array('admin', $user->getRoleNames())) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_AUTHORIZED', 'message' => 'Account is not authorized as an administrator.']]
+            ], 403);
+        }
+
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+
+        return response()->json([
+            'data' => ['reset' => true, 'message' => 'Admin password reset successfully. You can now sign in to the Admin Portal.'],
+            'meta' => null,
+            'errors' => null,
+        ]);
     }
 }
 
