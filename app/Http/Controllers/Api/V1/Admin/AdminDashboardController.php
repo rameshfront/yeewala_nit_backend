@@ -28,7 +28,7 @@ class AdminDashboardController extends Controller
 
         $membershipRevenue = DB::table('orders')
             ->where('status', 'completed')
-            ->sum('total_amount_minor_units');
+            ->sum('total_minor_units');
 
         $creatorPayouts = DB::table('withdrawal_requests')
             ->where('status', 'completed')
