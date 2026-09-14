@@ -13,6 +13,11 @@ use App\Http\Controllers\Api\V1\Admin\SettingsController;
 use App\Http\Controllers\Api\V1\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminLocationController;
 use App\Http\Controllers\Api\V1\Admin\AdminAuditLogController;
+use App\Http\Controllers\Api\V1\Admin\AdminUserController;
+use App\Http\Controllers\Api\V1\Admin\AdminCreatorController;
+use App\Http\Controllers\Api\V1\Admin\AdminVideoController;
+use App\Http\Controllers\Api\V1\Admin\AdminModerationController;
+use App\Http\Controllers\Api\V1\Admin\AdminMonetizationController;
 use App\Http\Controllers\Api\V1\Location\LocationController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +31,62 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::patch('/admin/settings/{group}', [SettingsController::class, 'update']);
     Route::get('/admin/dashboard', [AdminDashboardController::class, 'getDashboard']);
     Route::get('/admin/audit-logs', [AdminAuditLogController::class, 'index']);
+
+    // Admin Users
+    Route::get('/admin/users', [AdminUserController::class, 'index']);
+    Route::get('/admin/users/{id}', [AdminUserController::class, 'show']);
+    Route::patch('/admin/users/{id}/suspend', [AdminUserController::class, 'suspend']);
+    Route::patch('/admin/users/{id}/ban', [AdminUserController::class, 'ban']);
+    Route::patch('/admin/users/{id}/reactivate', [AdminUserController::class, 'reactivate']);
+    Route::post('/admin/users/{id}/reset-password', [AdminUserController::class, 'resetPassword']);
+    Route::get('/admin/users/{id}/sessions', [AdminUserController::class, 'sessions']);
+    Route::delete('/admin/users/{id}/sessions', [AdminUserController::class, 'resetPassword']);
+    Route::get('/admin/users/{id}/wallet', [AdminUserController::class, 'wallet']);
+    Route::get('/admin/users/{id}/wallet/transactions', [AdminUserController::class, 'walletTransactions']);
+    Route::post('/admin/users/{id}/wallet/adjust', [AdminUserController::class, 'adjustWallet']);
+
+    // Admin Creators
+    Route::get('/admin/creators', [AdminCreatorController::class, 'index']);
+    Route::get('/admin/creators/{id}', [AdminCreatorController::class, 'show']);
+    Route::get('/admin/creators/{id}/kyc-documents', [AdminCreatorController::class, 'kycDocuments']);
+    Route::get('/admin/creators/{id}/bank-details', [AdminCreatorController::class, 'bankDetails']);
+    Route::get('/admin/creators/{id}/earnings', [AdminCreatorController::class, 'earnings']);
+
+    // Admin Videos (Content Management)
+    Route::get('/admin/videos', [AdminVideoController::class, 'index']);
+    Route::get('/admin/videos/{id}', [AdminVideoController::class, 'show']);
+    Route::patch('/admin/videos/{id}/approve', [AdminVideoController::class, 'approve']);
+    Route::patch('/admin/videos/{id}/reject', [AdminVideoController::class, 'reject']);
+    Route::patch('/admin/videos/{id}/request-changes', [AdminVideoController::class, 'requestChanges']);
+    Route::patch('/admin/videos/{id}/publish', [AdminVideoController::class, 'publish']);
+    Route::patch('/admin/videos/{id}/feature', [AdminVideoController::class, 'feature']);
+    Route::patch('/admin/videos/{id}/unfeature', [AdminVideoController::class, 'unfeature']);
+    Route::patch('/admin/videos/{id}/hide', [AdminVideoController::class, 'hide']);
+    Route::patch('/admin/videos/{id}/unhide', [AdminVideoController::class, 'unhide']);
+    Route::delete('/admin/videos/{id}', [AdminVideoController::class, 'destroy']);
+    Route::patch('/admin/videos/{id}/restore', [AdminVideoController::class, 'restore']);
+    Route::delete('/admin/videos/{id}/force', [AdminVideoController::class, 'forceDelete']);
+
+    // Admin Moderation (Reports & Comments)
+    Route::get('/admin/reports', [AdminModerationController::class, 'reports']);
+    Route::patch('/admin/reports/{id}/status', [AdminModerationController::class, 'updateReportStatus']);
+    Route::get('/admin/comments', [AdminModerationController::class, 'comments']);
+    Route::patch('/admin/comments/{id}/status', [AdminModerationController::class, 'updateCommentStatus']);
+    Route::delete('/admin/comments/{id}', [AdminModerationController::class, 'deleteComment']);
+    Route::patch('/admin/comments/{id}/restore', [AdminModerationController::class, 'restoreComment']);
+    Route::post('/admin/comments/{id}/warn', [AdminModerationController::class, 'warnCommentAuthor']);
+
+    // Admin Monetization & Withdrawals
+    Route::get('/admin/withdrawals', [AdminMonetizationController::class, 'withdrawals']);
+    Route::patch('/admin/withdrawals/{id}/approve', [AdminMonetizationController::class, 'approveWithdrawal']);
+    Route::patch('/admin/withdrawals/{id}/reject', [AdminMonetizationController::class, 'rejectWithdrawal']);
+    Route::patch('/admin/withdrawals/{id}/process', [AdminMonetizationController::class, 'processWithdrawal']);
+    Route::patch('/admin/withdrawals/{id}/mark-paid', [AdminMonetizationController::class, 'markWithdrawalPaid']);
+    Route::get('/admin/wallet-topups', [AdminMonetizationController::class, 'topups']);
+    Route::post('/admin/wallet-topups/{id}/approve', [AdminMonetizationController::class, 'approveTopup']);
+    Route::post('/admin/wallet-topups/{id}/reject', [AdminMonetizationController::class, 'rejectTopup']);
+    Route::get('/admin/coupons', [AdminMonetizationController::class, 'coupons']);
+    Route::post('/admin/coupons', [AdminMonetizationController::class, 'storeCoupon']);
 
     Route::get('/admin/countries', [AdminLocationController::class, 'listCountries']);
     Route::post('/admin/countries', [AdminLocationController::class, 'storeCountry']);
