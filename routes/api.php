@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\Engagement\EngagementController;
 use App\Http\Controllers\Api\V1\Admin\SettingsController;
 use App\Http\Controllers\Api\V1\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminLocationController;
+use App\Http\Controllers\Api\V1\Admin\AdminAuditLogController;
 use App\Http\Controllers\Api\V1\Location\LocationController;
 use Illuminate\Support\Facades\Route;
 
@@ -20,10 +21,11 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::get('/countries', [LocationController::class, 'countries']);
     Route::get('/countries/{countryId}/states', [LocationController::class, 'states']);
 
-    // Admin Settings, Locations & Dashboard
+    // Admin Settings, Locations, Dashboard & Audit Logs
     Route::get('/admin/settings', [SettingsController::class, 'index']);
     Route::patch('/admin/settings/{group}', [SettingsController::class, 'update']);
     Route::get('/admin/dashboard', [AdminDashboardController::class, 'getDashboard']);
+    Route::get('/admin/audit-logs', [AdminAuditLogController::class, 'index']);
 
     Route::get('/admin/countries', [AdminLocationController::class, 'listCountries']);
     Route::post('/admin/countries', [AdminLocationController::class, 'storeCountry']);
