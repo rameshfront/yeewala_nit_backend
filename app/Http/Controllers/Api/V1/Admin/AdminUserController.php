@@ -60,6 +60,7 @@ class AdminUserController extends Controller
                 'name' => $u->name,
                 'email' => $u->email,
                 'phone' => $u->phone ?? null,
+                'avatar_url' => $this->formatAvatarUrl($u->avatar_path ?? null),
                 'status' => $u->status ?? 'active',
                 'status_reason' => $u->status_reason ?? null,
                 'status_changed_at' => $u->status_changed_at ?? null,
@@ -108,6 +109,7 @@ class AdminUserController extends Controller
                 'name' => $u->name,
                 'email' => $u->email,
                 'phone' => $u->phone ?? null,
+                'avatar_url' => $this->formatAvatarUrl($u->avatar_path ?? null),
                 'status' => $u->status ?? 'active',
                 'status_reason' => $u->status_reason ?? null,
                 'status_changed_at' => $u->status_changed_at ?? null,
@@ -122,6 +124,19 @@ class AdminUserController extends Controller
             'meta' => null,
             'errors' => null,
         ]);
+    }
+
+    private function formatAvatarUrl(?string $avatarPath): ?string
+    {
+        if (!$avatarPath) return null;
+        if (str_starts_with($avatarPath, 'http://') || str_starts_with($avatarPath, 'https://')) {
+            return $avatarPath;
+        }
+        $baseUrl = rtrim(config('app.url', 'http://localhost:8000'), '/');
+        if (!str_starts_with($avatarPath, '/storage/') && !str_starts_with($avatarPath, 'storage/')) {
+            $avatarPath = '/storage/' . ltrim($avatarPath, '/');
+        }
+        return $baseUrl . '/' . ltrim($avatarPath, '/');
     }
 
     public function suspend(Request $request, $id)
