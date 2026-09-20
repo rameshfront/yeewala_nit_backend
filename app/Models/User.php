@@ -54,7 +54,7 @@ class User extends Authenticatable
 
     /**
      * Get the roles assigned to this user from the model_has_roles + roles tables.
-     * Returns an array of role name strings, e.g. ['super_admin'] or ['user'].
+     * Returns an array of role name strings, e.g. ['admin'] or ['user'].
      */
     public function getRoleNames(): array
     {
