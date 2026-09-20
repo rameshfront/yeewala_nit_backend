@@ -175,6 +175,40 @@ class AuthController extends Controller
         ]);
     }
 
+    public function adminMe(Request $request)
+    {
+        /** @var User|null $user */
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'UNAUTHENTICATED', 'message' => 'Admin is not authenticated.']
+                ]
+            ], 401);
+        }
+
+        if (!in_array('admin', $user->getRoleNames())) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'FORBIDDEN', 'message' => 'Access restricted to administrators.']
+                ]
+            ], 403);
+        }
+
+        $user->load(['country', 'state']);
+
+        return response()->json([
+            'data' => $user->formatForFrontend(),
+            'meta' => null,
+            'errors' => null
+        ]);
+    }
+
     public function me(Request $request)
     {
         /** @var User|null $user */

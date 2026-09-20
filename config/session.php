@@ -128,10 +128,17 @@ return [
     |
     */
 
-    'cookie' => env(
-        'SESSION_COOKIE',
-        Str::slug(env('APP_NAME', 'laravel'), '_').'_session'
-    ),
+    'cookie' => (function () {
+        $uri = $_SERVER['REQUEST_URI'] ?? '';
+        $isAdminHeader = isset($_SERVER['HTTP_X_ADMIN_PORTAL']) && $_SERVER['HTTP_X_ADMIN_PORTAL'] === '1';
+        if (str_starts_with($uri, '/api/v1/admin') || str_starts_with($uri, '/admin') || $isAdminHeader) {
+            return 'admin_session';
+        }
+        return env(
+            'SESSION_COOKIE',
+            Str::slug(env('APP_NAME', 'laravel'), '_').'_session'
+        );
+    })(),
 
     /*
     |--------------------------------------------------------------------------

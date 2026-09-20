@@ -26,8 +26,10 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::get('/countries', [LocationController::class, 'countries']);
     Route::get('/countries/{countryId}/states', [LocationController::class, 'states']);
 
-    // ── Admin Routes (auth + role protected) ──────────────────────
     Route::middleware(['auth:sanctum'])->group(function () {
+        // Admin Profile & Identity
+        Route::get('/admin/me', [AuthController::class, 'adminMe']);
+
         // Admin Settings, Dashboard & Audit Logs
         Route::get('/admin/settings', [SettingsController::class, 'index']);
         Route::patch('/admin/settings/{group}', [SettingsController::class, 'update']);

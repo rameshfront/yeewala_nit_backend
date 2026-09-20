@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->prepend(\App\Http\Middleware\ForceCors::class);
+        $middleware->prepend(\App\Http\Middleware\SeparateAdminSession::class);
         $middleware->statefulApi();
         $middleware->validateCsrfTokens(except: [
             'api/*',
