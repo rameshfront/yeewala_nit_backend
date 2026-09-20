@@ -33,7 +33,7 @@ class ForceCors
             return response('', 204)
                 ->header('Access-Control-Allow-Origin', $allowOrigin)
                 ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-                ->header('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept, Authorization, X-Requested-With, X-XSRF-TOKEN, ngrok-skip-browser-warning')
+                ->header('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept, Authorization, X-Requested-With, X-XSRF-TOKEN, X-Admin-Portal, ngrok-skip-browser-warning, *')
                 ->header('Access-Control-Allow-Credentials', 'true')
                 ->header('Access-Control-Max-Age', '86400');
         }
@@ -42,13 +42,13 @@ class ForceCors
 
         $response->headers->set('Access-Control-Allow-Origin', $allowOrigin);
         $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        $response->headers->set('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept, Authorization, X-Requested-With, X-XSRF-TOKEN, ngrok-skip-browser-warning');
+        $response->headers->set('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept, Authorization, X-Requested-With, X-XSRF-TOKEN, X-Admin-Portal, ngrok-skip-browser-warning, *');
         $response->headers->set('Access-Control-Allow-Credentials', 'true');
 
         // Ensure session and XSRF cookies are available across all .sikaa.online subdomains
         if (str_contains($request->getHost(), 'sikaa.online') || str_contains($origin, 'sikaa.online')) {
             foreach ($response->headers->getCookies() as $cookie) {
-                if (in_array($cookie->getName(), ['laravel_session', 'XSRF-TOKEN'], true)) {
+                if (in_array($cookie->getName(), ['laravel_session', 'admin_session', 'yeewala_session', 'XSRF-TOKEN'], true)) {
                     $response->headers->setCookie(
                         $cookie->withDomain('.sikaa.online')
                             ->withSecure(true)
