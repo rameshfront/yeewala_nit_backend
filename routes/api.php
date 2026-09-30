@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\V1\Admin\AdminUserController;
 use App\Http\Controllers\Api\V1\Admin\AdminCreatorController;
 use App\Http\Controllers\Api\V1\Admin\AdminVideoController;
 use App\Http\Controllers\Api\V1\Admin\AdminModerationController;
+use App\Http\Controllers\Api\V1\Admin\AdminCategoryController;
 use App\Http\Controllers\Api\V1\Admin\AdminMonetizationController;
 use App\Http\Controllers\Api\V1\Location\LocationController;
 use Illuminate\Support\Facades\Route;
@@ -103,6 +104,14 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::get('/admin/states/{id}', [AdminLocationController::class, 'showState']);
         Route::match(['put', 'patch'], '/admin/states/{id}', [AdminLocationController::class, 'updateState']);
         Route::delete('/admin/states/{id}', [AdminLocationController::class, 'destroyState']);
+
+        // Admin Categories
+        Route::get('/admin/categories', [AdminCategoryController::class, 'index']);
+        Route::post('/admin/categories', [AdminCategoryController::class, 'store']);
+        Route::get('/admin/categories/{id}', [AdminCategoryController::class, 'show']);
+        Route::match(['put', 'patch'], '/admin/categories/{id}', [AdminCategoryController::class, 'update']);
+        Route::patch('/admin/categories/{id}/status', [AdminCategoryController::class, 'toggleStatus']);
+        Route::delete('/admin/categories/{id}', [AdminCategoryController::class, 'destroy']);
     });
 
 
