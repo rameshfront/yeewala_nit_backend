@@ -63,6 +63,58 @@ class WalletController extends Controller
     }
 
     /**
+     * Get transaction history for current user's wallet.
+     */
+    public function getMyTransactions(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]], 401);
+        }
+
+        $wallet = DB::table('wallets')
+            ->where('owner_id', $user->id)
+            ->where('type', 'user')
+            ->first();
+
+        if (!$wallet) {
+            return response()->json([
+                'data' => [],
+                'meta' => ['pagination' => ['next_cursor' => null, 'per_page' => 0]],
+                'errors' => null,
+            ]);
+        }
+
+        $transactions = DB::table('wallet_transactions')
+            ->where('wallet_id', $wallet->id)
+            ->orderBy('id', 'desc')
+            ->get()
+            ->map(function ($t) {
+                return [
+                    'id' => (int)$t->id,
+                    'wallet_id' => (int)$t->wallet_id,
+                    'type' => $t->type,
+                    'category' => $t->category ?? 'purchase',
+                    'amount_minor_units' => (int)$t->amount_minor_units,
+                    'status' => $t->status ?? 'cleared',
+                    'description' => $t->description ?? '',
+                    'created_at' => $t->created_at,
+                ];
+            });
+
+        return response()->json([
+            'data' => $transactions,
+            'meta' => [
+                'pagination' => [
+                    'next_cursor' => null,
+                    'per_page' => count($transactions),
+                ],
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
      * List purchased videos for current user.
      */
     public function listPurchasedVideos(Request $request)

@@ -145,7 +145,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
 
     // ── Public Content Routes ─────────────────────────────────────
     Route::get('/videos', [VideoController::class, 'index']);
-    Route::get('/videos/{id}', [VideoController::class, 'show']);
+    Route::get('/videos/{id}', [VideoController::class, 'show'])->whereNumber('id');
     Route::get('/feed/home', [VideoController::class, 'homeFeed']);
     Route::get('/feed/trending', [VideoController::class, 'trendingFeed']);
     Route::get('/feed/latest', [VideoController::class, 'latestFeed']);
@@ -190,6 +190,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
 
         // Wallet & Video Purchases
         Route::get('/wallet', [WalletController::class, 'getMyWallet']);
+        Route::get('/wallet/transactions', [WalletController::class, 'getMyTransactions']);
         Route::get('/wallet/balances', [\App\Http\Controllers\Api\V1\Monetization\WalletOperationController::class, 'getWalletBalances']);
         Route::post('/wallet/topups', [WalletController::class, 'topUp']);
         Route::post('/wallet/topups/{id}/verify', [WalletController::class, 'verifyTopUp']);
