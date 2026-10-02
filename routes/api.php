@@ -18,6 +18,8 @@ use App\Http\Controllers\Api\V1\Admin\AdminCreatorController;
 use App\Http\Controllers\Api\V1\Admin\AdminVideoController;
 use App\Http\Controllers\Api\V1\Admin\AdminModerationController;
 use App\Http\Controllers\Api\V1\Admin\AdminCategoryController;
+use App\Http\Controllers\Api\V1\Admin\AdminTagController;
+use App\Http\Controllers\Api\V1\Admin\AdminAnalyticsController;
 use App\Http\Controllers\Api\V1\Admin\AdminMonetizationController;
 use App\Http\Controllers\Api\V1\Location\LocationController;
 use Illuminate\Support\Facades\Route;
@@ -92,6 +94,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::post('/admin/wallet-topups/{id}/reject', [AdminMonetizationController::class, 'rejectTopup']);
         Route::get('/admin/coupons', [AdminMonetizationController::class, 'coupons']);
         Route::post('/admin/coupons', [AdminMonetizationController::class, 'storeCoupon']);
+        Route::get('/admin/analytics/reports/{type}', [AdminAnalyticsController::class, 'getReport']);
 
         Route::get('/admin/countries', [AdminLocationController::class, 'listCountries']);
         Route::post('/admin/countries', [AdminLocationController::class, 'storeCountry']);
@@ -112,6 +115,13 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::match(['put', 'patch'], '/admin/categories/{id}', [AdminCategoryController::class, 'update']);
         Route::patch('/admin/categories/{id}/status', [AdminCategoryController::class, 'toggleStatus']);
         Route::delete('/admin/categories/{id}', [AdminCategoryController::class, 'destroy']);
+
+        // Admin Tags
+        Route::get('/admin/tags', [AdminTagController::class, 'index']);
+        Route::post('/admin/tags', [AdminTagController::class, 'store']);
+        Route::get('/admin/tags/{id}', [AdminTagController::class, 'show']);
+        Route::match(['put', 'patch'], '/admin/tags/{id}', [AdminTagController::class, 'update']);
+        Route::delete('/admin/tags/{id}', [AdminTagController::class, 'destroy']);
     });
 
 
