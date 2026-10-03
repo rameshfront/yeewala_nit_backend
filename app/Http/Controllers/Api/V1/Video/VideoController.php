@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1\Video;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class VideoController extends Controller
 {
@@ -29,6 +31,67 @@ class VideoController extends Controller
             }
         }
 
+        $category = null;
+        if (!empty($v->category_id)) {
+            $cat = DB::table('categories')->where('id', $v->category_id)->first();
+            if ($cat) {
+                $category = [
+                    'id' => (int)$cat->id,
+                    'parent_id' => $cat->parent_id ? (int)$cat->parent_id : null,
+                    'name' => $cat->name,
+                    'slug' => $cat->slug,
+                    'is_active' => (bool)($cat->is_active ?? true),
+                ];
+            }
+        }
+
+        $tags = [];
+        if (isset($v->id)) {
+            $tags = DB::table('video_tag')
+                ->join('tags', 'video_tag.tag_id', '=', 'tags.id')
+                ->where('video_tag.video_id', $v->id)
+                ->select('tags.id', 'tags.name', 'tags.slug')
+                ->get()
+                ->map(fn($t) => [
+                    'id' => (int)$t->id,
+                    'name' => $t->name,
+                    'slug' => $t->slug,
+                ])
+                ->toArray();
+        }
+
+        $renditions = [];
+        if (isset($v->id)) {
+            $renditions = DB::table('video_renditions')
+                ->where('video_id', $v->id)
+                ->get()
+                ->map(fn($r) => [
+                    'resolution' => $r->resolution,
+                    'width' => (int)$r->width,
+                    'height' => (int)$r->height,
+                    'bitrate_kbps' => (int)$r->bitrate_kbps,
+                ])
+                ->toArray();
+        }
+
+        $captions = [];
+        if (isset($v->id)) {
+            $captions = DB::table('video_captions')
+                ->where('video_id', $v->id)
+                ->get()
+                ->map(fn($c) => [
+                    'id' => (int)$c->id,
+                    'video_id' => (int)$c->video_id,
+                    'language_code' => $c->language_code,
+                    'label' => $c->label,
+                    'source' => $c->source,
+                    'vtt_url' => $c->vtt_path,
+                    'created_at' => $c->created_at,
+                    'updated_at' => $c->updated_at,
+                ])
+                ->toArray();
+        }
+
         return [
             'id' => (int)$v->id,
             'creator_profile_id' => (int)$v->creator_profile_id,
@@ -51,10 +114,10 @@ class VideoController extends Controller
             'reviewed_at' => $v->reviewed_at,
             'is_hidden' => false,
             'is_featured' => (bool)$v->is_featured,
-            'category' => null,
-            'tags' => [],
-            'renditions' => [],
-            'captions' => [],
+            'category' => $category,
+            'tags' => $tags,
+            'renditions' => $renditions,
+            'captions' => $captions,
             'duration_seconds' => (int)($v->duration_seconds ?? 0),
             'source_width' => (int)($v->source_width ?? 1920),
             'source_height' => (int)($v->source_height ?? 1080),
@@ -399,6 +462,288 @@ class VideoController extends Controller
         return response()->json([
             'data' => $tags,
             'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * PATCH /api/v1/videos/{id}
+     * Update video metadata (title, description, category, tags).
+     */
+    public function update(Request $request, $id)
+    {
+        $video = DB::table('videos')->where('id', $id)->whereNull('deleted_at')->first();
+        if (!$video) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'Video not found']],
+            ], 404);
+        }
+
+        $user = auth('sanctum')->user() ?? auth('web')->user();
+        if (!$user) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']],
+            ], 401);
+        }
+
+        $creatorProfile = DB::table('creator_profiles')->where('id', $video->creator_profile_id)->first();
+        $isOwner = $creatorProfile && (int)$creatorProfile->user_id === (int)$user->id;
+        $isAdmin = (bool)($user->is_admin ?? false);
+
+        if (!$isOwner && !$isAdmin) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'FORBIDDEN', 'message' => 'You do not have permission to edit this video']],
+            ], 403);
+        }
+
+        $request->validate([
+            'title'       => 'sometimes|string|max:255',
+            'description' => 'nullable|string',
+            'category_id' => 'nullable|integer',
+            'tags'        => 'nullable|array',
+        ]);
+
+        $updates = [];
+        if ($request->has('title')) {
+            $updates['title'] = $request->input('title');
+        }
+        if ($request->has('description')) {
+            $updates['description'] = $request->input('description');
+        }
+        if ($request->has('category_id')) {
+            $catId = $request->input('category_id');
+            if ($catId) {
+                $catExists = DB::table('categories')->where('id', $catId)->exists();
+                $updates['category_id'] = $catExists ? $catId : null;
+            } else {
+                $updates['category_id'] = null;
+            }
+        }
+        $updates['updated_at'] = now();
+
+        DB::table('videos')->where('id', $id)->update($updates);
+
+        // Sync tags if provided
+        if ($request->has('tags')) {
+            $tagInputs = $request->input('tags', []);
+            DB::table('video_tag')->where('video_id', $id)->delete();
+
+            foreach ($tagInputs as $tagName) {
+                $tagName = trim((string)$tagName);
+                if ($tagName === '') continue;
+
+                $slug = Str::slug($tagName);
+                if (!$slug) {
+                    $slug = 'tag-' . md5($tagName);
+                }
+
+                $tag = DB::table('tags')->where('name', $tagName)->orWhere('slug', $slug)->first();
+                if (!$tag) {
+                    $tagId = DB::table('tags')->insertGetId([
+                        'name'       => $tagName,
+                        'slug'       => $slug,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                } else {
+                    $tagId = $tag->id;
+                }
+
+                DB::table('video_tag')->insertOrIgnore([
+                    'video_id' => $id,
+                    'tag_id'   => $tagId,
+                ]);
+            }
+        }
+
+        $freshVideo = DB::table('videos')
+            ->join('creator_profiles', 'videos.creator_profile_id', '=', 'creator_profiles.id')
+            ->select('videos.*', 'creator_profiles.user_id', 'creator_profiles.channel_name', 'creator_profiles.channel_slug', 'creator_profiles.avatar_path', 'creator_profiles.is_verified_badge')
+            ->where('videos.id', $id)
+            ->first();
+
+        return response()->json([
+            'data'   => $this->formatVideo($freshVideo),
+            'meta'   => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * PATCH /api/v1/videos/{id}/resubmit
+     */
+    public function resubmit($id)
+    {
+        $video = DB::table('videos')->where('id', $id)->whereNull('deleted_at')->first();
+        if (!$video) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'Video not found']],
+            ], 404);
+        }
+
+        $user = auth('sanctum')->user() ?? auth('web')->user();
+        $creatorProfile = DB::table('creator_profiles')->where('id', $video->creator_profile_id)->first();
+        $isOwner = $creatorProfile && (int)$creatorProfile->user_id === (int)$user?->id;
+        $isAdmin = (bool)($user?->is_admin ?? false);
+
+        if (!$isOwner && !$isAdmin) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'FORBIDDEN', 'message' => 'Forbidden']],
+            ], 403);
+        }
+
+        DB::table('videos')->where('id', $id)->update([
+            'review_status' => 'pending_review',
+            'updated_at'    => now(),
+        ]);
+
+        $freshVideo = DB::table('videos')
+            ->join('creator_profiles', 'videos.creator_profile_id', '=', 'creator_profiles.id')
+            ->select('videos.*', 'creator_profiles.user_id', 'creator_profiles.channel_name', 'creator_profiles.channel_slug', 'creator_profiles.avatar_path', 'creator_profiles.is_verified_badge')
+            ->where('videos.id', $id)
+            ->first();
+
+        return response()->json([
+            'data'   => $this->formatVideo($freshVideo),
+            'meta'   => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * DELETE /api/v1/videos/{id}
+     */
+    public function destroy($id)
+    {
+        $video = DB::table('videos')->where('id', $id)->whereNull('deleted_at')->first();
+        if (!$video) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'Video not found']],
+            ], 404);
+        }
+
+        $user = auth('sanctum')->user() ?? auth('web')->user();
+        $creatorProfile = DB::table('creator_profiles')->where('id', $video->creator_profile_id)->first();
+        $isOwner = $creatorProfile && (int)$creatorProfile->user_id === (int)$user?->id;
+        $isAdmin = (bool)($user?->is_admin ?? false);
+
+        if (!$isOwner && !$isAdmin) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'FORBIDDEN', 'message' => 'Forbidden']],
+            ], 403);
+        }
+
+        DB::table('videos')->where('id', $id)->update([
+            'deleted_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'data'   => null,
+            'meta'   => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * GET /api/v1/videos/{id}/renditions
+     */
+    public function renditions($id)
+    {
+        $renditions = DB::table('video_renditions')
+            ->where('video_id', $id)
+            ->get()
+            ->map(fn($r) => [
+                'resolution'   => $r->resolution,
+                'width'        => (int)$r->width,
+                'height'       => (int)$r->height,
+                'bitrate_kbps' => (int)$r->bitrate_kbps,
+            ])
+            ->toArray();
+
+        return response()->json([
+            'data'   => $renditions,
+            'meta'   => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/videos/{id}/captions
+     */
+    public function uploadCaption(Request $request, $id)
+    {
+        $request->validate([
+            'language_code' => 'required|string|max:10',
+            'label'         => 'required|string|max:255',
+            'vtt'           => 'required|file',
+        ]);
+
+        $video = DB::table('videos')->where('id', $id)->whereNull('deleted_at')->first();
+        if (!$video) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'Video not found']],
+            ], 404);
+        }
+
+        $path = $request->file('vtt')->store("captions/{$id}", 'public');
+        $captionId = DB::table('video_captions')->insertGetId([
+            'video_id'      => $id,
+            'language_code' => $request->language_code,
+            'label'         => $request->label,
+            'vtt_path'      => Storage::disk('public')->url($path),
+            'source'        => 'creator_upload',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        $caption = DB::table('video_captions')->where('id', $captionId)->first();
+
+        return response()->json([
+            'data' => [
+                'id'            => (int)$caption->id,
+                'video_id'      => (int)$caption->video_id,
+                'language_code' => $caption->language_code,
+                'label'         => $caption->label,
+                'source'        => $caption->source,
+                'vtt_url'       => $caption->vtt_path,
+                'created_at'    => $caption->created_at,
+                'updated_at'    => $caption->updated_at,
+            ],
+            'meta'   => null,
+            'errors' => null,
+        ], 201);
+    }
+
+    /**
+     * DELETE /api/v1/videos/{id}/captions/{captionId}
+     */
+    public function deleteCaption($videoId, $captionId)
+    {
+        DB::table('video_captions')
+            ->where('video_id', $videoId)
+            ->where('id', $captionId)
+            ->delete();
+
+        return response()->json([
+            'data'   => null,
+            'meta'   => null,
             'errors' => null,
         ]);
     }

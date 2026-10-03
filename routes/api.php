@@ -147,6 +147,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     // ── Public Content Routes ─────────────────────────────────────
     Route::get('/videos', [VideoController::class, 'index']);
     Route::get('/videos/{id}', [VideoController::class, 'show'])->whereNumber('id');
+    Route::get('/videos/{id}/renditions', [VideoController::class, 'renditions'])->whereNumber('id');
     Route::get('/feed/home', [VideoController::class, 'homeFeed']);
     Route::get('/feed/trending', [VideoController::class, 'trendingFeed']);
     Route::get('/feed/latest', [VideoController::class, 'latestFeed']);
@@ -193,7 +194,13 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::post('/videos/uploads/{uploadId}/chunks', [UploadController::class, 'uploadChunk']);
         Route::get('/videos/uploads/{uploadId}', [UploadController::class, 'show']);
         Route::post('/videos/uploads/{uploadId}/finalize', [UploadController::class, 'finalize']);
+        // Video Studio & Management
         Route::get('/videos/mine', [VideoController::class, 'myVideos']);
+        Route::patch('/videos/{id}', [VideoController::class, 'update'])->whereNumber('id');
+        Route::delete('/videos/{id}', [VideoController::class, 'destroy'])->whereNumber('id');
+        Route::patch('/videos/{id}/resubmit', [VideoController::class, 'resubmit'])->whereNumber('id');
+        Route::post('/videos/{id}/captions', [VideoController::class, 'uploadCaption'])->whereNumber('id');
+        Route::delete('/videos/{id}/captions/{captionId}', [VideoController::class, 'deleteCaption'])->whereNumber('id');
 
         // Wallet & Video Purchases
         Route::get('/wallet', [WalletController::class, 'getMyWallet']);
