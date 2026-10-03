@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\GoogleAuthController;
 use App\Http\Controllers\Api\V1\Video\VideoController;
+use App\Http\Controllers\Api\V1\Video\UploadController;
 use App\Http\Controllers\Api\V1\Monetization\WalletController;
 use App\Http\Controllers\Api\V1\Monetization\OrderController;
 use App\Http\Controllers\Api\V1\Creator\CreatorController;
@@ -186,6 +187,12 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         // Feed routes that need auth
         Route::get('/feed/following', [VideoController::class, 'followingFeed']);
         Route::get('/feed/continue-watching', [VideoController::class, 'continueWatching']);
+
+        // Chunked Video Upload
+        Route::post('/videos/uploads', [UploadController::class, 'initiate']);
+        Route::post('/videos/uploads/{uploadId}/chunks', [UploadController::class, 'uploadChunk']);
+        Route::get('/videos/uploads/{uploadId}', [UploadController::class, 'show']);
+        Route::post('/videos/uploads/{uploadId}/finalize', [UploadController::class, 'finalize']);
         Route::get('/videos/mine', [VideoController::class, 'myVideos']);
 
         // Wallet & Video Purchases
