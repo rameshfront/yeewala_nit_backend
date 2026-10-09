@@ -123,30 +123,57 @@ class AdminMonetizationController extends Controller
 
     public function topups(Request $request)
     {
-        $topups = [];
-        if (Schema::hasTable('wallet_top_ups')) {
-            $topups = DB::table('wallet_top_ups')->orderBy('id', 'desc')->get();
-        } else if (Schema::hasTable('orders')) {
-            $orders = DB::table('orders')->where('orderable_type', 'like', '%wallet%')->orWhereNull('orderable_type')->orderBy('id', 'desc')->get();
-            $topups = $orders->map(function ($o) {
-                return [
-                    'id' => (int)$o->id,
-                    'wallet_id' => (int)$o->user_id,
-                    'amount_minor_units' => (int)$o->total_minor_units,
-                    'status' => $o->status,
-                    'payment_method' => $o->gateway ?? 'razorpay',
-                    'gateway_reference' => $o->gateway_payment_id ?? $o->order_number,
-                    'created_at' => $o->created_at,
-                ];
-            });
+        $status = $request->query('status'); // 'pending', 'paid', 'failed'
+
+        $query = DB::table('recharge_requests')
+            ->join('users', 'recharge_requests.user_id', '=', 'users.id')
+            ->select(
+                'recharge_requests.*',
+                'users.name as user_name',
+                'users.email as user_email'
+            );
+
+        if ($request->filled('status')) {
+            $dbStatus = match ($status) {
+                'paid' => 'approved',
+                'failed' => 'rejected',
+                default => 'pending',
+            };
+            $query->where('recharge_requests.status', $dbStatus);
         }
 
+        $items = $query->orderBy('recharge_requests.id', 'desc')->get();
+
+        $formatted = $items->map(function ($r) {
+            $frontendStatus = match ($r->status) {
+                'approved' => 'paid',
+                'rejected' => 'failed',
+                default => 'pending',
+            };
+
+            return [
+                'id' => (int)$r->id,
+                'amount_minor_units' => (int)round(((float)$r->requested_amount) * 100),
+                'currency' => 'INR',
+                'status' => $frontendStatus,
+                'gateway_order_id' => $r->transaction_reference,
+                'gateway_payment_id' => $r->transaction_reference,
+                'paid_at' => $r->status === 'approved' ? $r->updated_at : null,
+                'created_at' => $r->created_at,
+                'user' => [
+                    'id' => (int)$r->user_id,
+                    'name' => $r->user_name,
+                    'email' => $r->user_email,
+                ],
+            ];
+        })->values()->toArray();
+
         return response()->json([
-            'data' => $topups,
+            'data' => $formatted,
             'meta' => [
                 'pagination' => [
                     'next_cursor' => null,
-                    'per_page' => count($topups),
+                    'per_page' => count($formatted),
                 ],
             ],
             'errors' => null,
@@ -155,12 +182,151 @@ class AdminMonetizationController extends Controller
 
     public function approveTopup($id)
     {
-        return response()->json(['message' => 'Top-up approved.', 'data' => ['id' => $id, 'status' => 'completed']]);
+        $recharge = DB::table('recharge_requests')->where('id', $id)->first();
+        if (!$recharge) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'Top-up request not found']],
+            ], 404);
+        }
+
+        if ($recharge->status !== 'approved') {
+            $walletService = app(\App\Services\Wallet\WalletService::class);
+            $walletService->approveRecharge(
+                $recharge->user_id,
+                $recharge->requested_amount,
+                $recharge->requested_amount,
+                (int)$recharge->id
+            );
+
+            // Record transaction in wallet_transactions
+            if (Schema::hasTable('wallets') && Schema::hasTable('wallet_transactions')) {
+                $wallet = DB::table('wallets')->where('owner_id', $recharge->user_id)->where('type', 'user')->first();
+                if (!$wallet) {
+                    $walletId = DB::table('wallets')->insertGetId([
+                        'type' => 'user',
+                        'owner_id' => $recharge->user_id,
+                        'currency' => 'INR',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                } else {
+                    $walletId = $wallet->id;
+                }
+
+                DB::table('wallet_transactions')->insert([
+                    'wallet_id' => $walletId,
+                    'type' => 'credit',
+                    'category' => 'topup',
+                    'amount_minor_units' => (int)round(((float)$recharge->requested_amount) * 100),
+                    'status' => 'cleared',
+                    'description' => 'Wallet recharge approved (Ref: ' . ($recharge->transaction_reference ?? 'N/A') . ')',
+                    'created_by' => auth()->id() ?? 3,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // Create user notification
+            if (Schema::hasTable('notifications')) {
+                DB::table('notifications')->insert([
+                    'id' => (string)\Illuminate\Support\Str::uuid(),
+                    'type' => 'wallet_topup_approved',
+                    'notifiable_type' => 'App\\Models\\User',
+                    'notifiable_id' => $recharge->user_id,
+                    'data' => json_encode([
+                        'type' => 'wallet_topup_approved',
+                        'amount' => (float)$recharge->requested_amount,
+                        'recharge_id' => (int)$recharge->id,
+                        'message' => 'Your wallet top-up of ₹' . $recharge->requested_amount . ' has been approved and credited!',
+                    ]),
+                    'read_at' => null,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }
+
+        $user = DB::table('users')->where('id', $recharge->user_id)->first();
+
+        return response()->json([
+            'data' => [
+                'id' => (int)$recharge->id,
+                'amount_minor_units' => (int)round(((float)$recharge->requested_amount) * 100),
+                'currency' => 'INR',
+                'status' => 'paid',
+                'gateway_order_id' => $recharge->transaction_reference,
+                'gateway_payment_id' => $recharge->transaction_reference,
+                'paid_at' => now()->toISOString(),
+                'created_at' => $recharge->created_at,
+                'user' => [
+                    'id' => (int)$recharge->user_id,
+                    'name' => $user->name ?? 'User',
+                    'email' => $user->email ?? '',
+                ],
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
     }
 
     public function rejectTopup($id)
     {
-        return response()->json(['message' => 'Top-up rejected.', 'data' => ['id' => $id, 'status' => 'failed']]);
+        $recharge = DB::table('recharge_requests')->where('id', $id)->first();
+        if (!$recharge) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'Top-up request not found']],
+            ], 404);
+        }
+
+        DB::table('recharge_requests')->where('id', $id)->update([
+            'status' => 'rejected',
+            'updated_at' => now(),
+        ]);
+
+        // Create user notification
+        if (Schema::hasTable('notifications')) {
+            DB::table('notifications')->insert([
+                'id' => (string)\Illuminate\Support\Str::uuid(),
+                'type' => 'wallet_topup_rejected',
+                'notifiable_type' => 'App\\Models\\User',
+                'notifiable_id' => $recharge->user_id,
+                'data' => json_encode([
+                    'type' => 'wallet_topup_rejected',
+                    'amount' => (float)$recharge->requested_amount,
+                    'recharge_id' => (int)$recharge->id,
+                    'message' => 'Your wallet top-up request of ₹' . $recharge->requested_amount . ' was rejected.',
+                ]),
+                'read_at' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $user = DB::table('users')->where('id', $recharge->user_id)->first();
+
+        return response()->json([
+            'data' => [
+                'id' => (int)$recharge->id,
+                'amount_minor_units' => (int)round(((float)$recharge->requested_amount) * 100),
+                'currency' => 'INR',
+                'status' => 'failed',
+                'gateway_order_id' => $recharge->transaction_reference,
+                'gateway_payment_id' => $recharge->transaction_reference,
+                'paid_at' => null,
+                'created_at' => $recharge->created_at,
+                'user' => [
+                    'id' => (int)$recharge->user_id,
+                    'name' => $user->name ?? 'User',
+                    'email' => $user->email ?? '',
+                ],
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
     }
 
     public function coupons(Request $request)

@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\Creator\CreatorController;
 use App\Http\Controllers\Api\V1\Analytics\CreatorAnalyticsController;
 use App\Http\Controllers\Api\V1\Engagement\HistoryController;
 use App\Http\Controllers\Api\V1\Engagement\EngagementController;
+use App\Http\Controllers\Api\V1\Engagement\NotificationController;
 use App\Http\Controllers\Api\V1\Admin\SettingsController;
 use App\Http\Controllers\Api\V1\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminLocationController;
@@ -183,7 +184,11 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::post('/auth/phone/verify', [AuthController::class, 'verifyPhoneCode']);
 
         // Notifications
-        Route::get('/notifications', [VideoController::class, 'notifications']);
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::patch('/notifications/{id}/read', [NotificationController::class, 'markRead']);
+        Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+        Route::get('/notification-preferences', [NotificationController::class, 'preferences']);
+        Route::patch('/notification-preferences', [NotificationController::class, 'updatePreferences']);
 
         // Feed routes that need auth
         Route::get('/feed/following', [VideoController::class, 'followingFeed']);

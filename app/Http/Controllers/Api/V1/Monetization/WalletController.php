@@ -273,14 +273,53 @@ class WalletController extends Controller
         }
 
         $paymentId = $request->input('razorpay_payment_id');
-        $signature = $request->input('razorpay_signature');
-
         $recharge = DB::table('recharge_requests')->where('id', $id)->where('user_id', $user->id)->first();
+
         if ($recharge) {
             DB::table('recharge_requests')->where('id', $id)->update([
                 'transaction_reference' => $paymentId ?: $recharge->transaction_reference,
                 'updated_at'            => now(),
             ]);
+
+            // Notify admins of new topup request
+            if (\Illuminate\Support\Facades\Schema::hasTable('notifications')) {
+                $adminIds = DB::table('model_has_roles')
+                    ->where('role_id', 5)
+                    ->pluck('model_id')
+                    ->toArray();
+
+                if (empty($adminIds)) {
+                    $adminIds = [1, 3];
+                }
+
+                foreach ($adminIds as $adminId) {
+                    $alreadyNotified = DB::table('notifications')
+                        ->where('notifiable_id', $adminId)
+                        ->where('notifiable_type', 'App\\Models\\User')
+                        ->where('data', 'like', '%"recharge_id":' . $id . '%')
+                        ->exists();
+
+                    if (!$alreadyNotified) {
+                        DB::table('notifications')->insert([
+                            'id'              => (string)\Illuminate\Support\Str::uuid(),
+                            'type'            => 'wallet_topup_requested',
+                            'notifiable_type' => 'App\\Models\\User',
+                            'notifiable_id'   => $adminId,
+                            'data'            => json_encode([
+                                'type'        => 'wallet_topup_requested',
+                                'amount'      => (float)$recharge->requested_amount,
+                                'user_name'   => $user->name,
+                                'user_id'     => (int)$user->id,
+                                'recharge_id' => (int)$id,
+                                'message'     => "New wallet top-up request: ₹{$recharge->requested_amount} from {$user->name}",
+                            ]),
+                            'read_at'         => null,
+                            'created_at'      => now(),
+                            'updated_at'      => now(),
+                        ]);
+                    }
+                }
+            }
         }
 
         return response()->json([
