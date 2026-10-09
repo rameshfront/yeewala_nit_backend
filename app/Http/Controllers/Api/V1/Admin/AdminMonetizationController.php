@@ -144,16 +144,28 @@ class AdminMonetizationController extends Controller
 
         $items = $query->orderBy('recharge_requests.id', 'desc')->get();
 
-        $formatted = $items->map(function ($r) {
+        $commissionPercent = (float)(DB::table('settings')->where('group', 'payment')->where('key', 'platform_commission_percent')->value('value') ?? 20);
+
+        $formatted = $items->map(function ($r) use ($commissionPercent) {
             $frontendStatus = match ($r->status) {
                 'approved' => 'paid',
                 'rejected' => 'failed',
                 default => 'pending',
             };
 
+            $reqAmount = (float)$r->requested_amount;
+            $appAmount = $r->approved_amount !== null ? (float)$r->approved_amount : null;
+            $defaultCreditAmount = round($reqAmount * ((100 - $commissionPercent) / 100), 2);
+            $commissionAmount = round($reqAmount * ($commissionPercent / 100), 2);
+
             return [
                 'id' => (int)$r->id,
-                'amount_minor_units' => (int)round(((float)$r->requested_amount) * 100),
+                'amount_minor_units' => (int)round($reqAmount * 100),
+                'requested_amount' => $reqAmount,
+                'approved_amount' => $appAmount,
+                'default_credit_amount' => $defaultCreditAmount,
+                'platform_commission_percent' => $commissionPercent,
+                'commission_amount' => $commissionAmount,
                 'currency' => 'INR',
                 'status' => $frontendStatus,
                 'gateway_order_id' => $r->transaction_reference,
@@ -180,7 +192,7 @@ class AdminMonetizationController extends Controller
         ]);
     }
 
-    public function approveTopup($id)
+    public function approveTopup(Request $request, $id)
     {
         $recharge = DB::table('recharge_requests')->where('id', $id)->first();
         if (!$recharge) {
@@ -192,11 +204,21 @@ class AdminMonetizationController extends Controller
         }
 
         if ($recharge->status !== 'approved') {
+            $commissionPercent = (float)(DB::table('settings')->where('group', 'payment')->where('key', 'platform_commission_percent')->value('value') ?? 20);
+            $reqAmount = (float)$recharge->requested_amount;
+
+            // Admin can provide custom approved_amount or use default (requested - commission)
+            if ($request->filled('approved_amount') && is_numeric($request->input('approved_amount'))) {
+                $approvedAmount = max(0, round((float)$request->input('approved_amount'), 2));
+            } else {
+                $approvedAmount = round($reqAmount * ((100 - $commissionPercent) / 100), 2);
+            }
+
             $walletService = app(\App\Services\Wallet\WalletService::class);
             $walletService->approveRecharge(
                 $recharge->user_id,
                 $recharge->requested_amount,
-                $recharge->requested_amount,
+                $approvedAmount,
                 (int)$recharge->id
             );
 
@@ -219,9 +241,9 @@ class AdminMonetizationController extends Controller
                     'wallet_id' => $walletId,
                     'type' => 'credit',
                     'category' => 'topup',
-                    'amount_minor_units' => (int)round(((float)$recharge->requested_amount) * 100),
+                    'amount_minor_units' => (int)round($approvedAmount * 100),
                     'status' => 'cleared',
-                    'description' => 'Wallet recharge approved (Ref: ' . ($recharge->transaction_reference ?? 'N/A') . ')',
+                    'description' => "Wallet recharge approved: \u20b9{$approvedAmount} credited (Requested: \u20b9{$recharge->requested_amount}, Ref: " . ($recharge->transaction_reference ?? 'N/A') . ")",
                     'created_by' => auth()->id() ?? 3,
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -237,9 +259,10 @@ class AdminMonetizationController extends Controller
                     'notifiable_id' => $recharge->user_id,
                     'data' => json_encode([
                         'type' => 'wallet_topup_approved',
-                        'amount' => (float)$recharge->requested_amount,
+                        'requested_amount' => (float)$recharge->requested_amount,
+                        'amount' => $approvedAmount,
                         'recharge_id' => (int)$recharge->id,
-                        'message' => 'Your wallet top-up of ₹' . $recharge->requested_amount . ' has been approved and credited!',
+                        'message' => "Your wallet top-up request has been approved! \u20b9{$approvedAmount} has been credited to your wallet balance (Paid: \u20b9{$recharge->requested_amount}).",
                     ]),
                     'read_at' => null,
                     'created_at' => now(),
@@ -249,11 +272,15 @@ class AdminMonetizationController extends Controller
         }
 
         $user = DB::table('users')->where('id', $recharge->user_id)->first();
+        $freshRecharge = DB::table('recharge_requests')->where('id', $id)->first();
+        $finalApproved = (float)($freshRecharge->approved_amount ?? $recharge->requested_amount);
 
         return response()->json([
             'data' => [
                 'id' => (int)$recharge->id,
-                'amount_minor_units' => (int)round(((float)$recharge->requested_amount) * 100),
+                'amount_minor_units' => (int)round($finalApproved * 100),
+                'requested_amount' => (float)$recharge->requested_amount,
+                'approved_amount' => $finalApproved,
                 'currency' => 'INR',
                 'status' => 'paid',
                 'gateway_order_id' => $recharge->transaction_reference,
