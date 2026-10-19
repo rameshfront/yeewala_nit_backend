@@ -168,6 +168,8 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::get('/videos/{id}/comments', [EngagementController::class, 'listComments']);
     Route::get('/comments/{id}/replies', [EngagementController::class, 'listReplies']);
     Route::get('/videos/{id}/reaction', [EngagementController::class, 'getReaction']);
+    // Razorpay Webhooks (public - verified by HMAC signature)
+    Route::post('/webhooks/razorpay', [\App\Http\Controllers\Api\V1\Monetization\RazorpayWebhookController::class, 'handle']);
 
     // ── Authenticated User Routes ─────────────────────────────────
     Route::middleware(['auth:sanctum'])->group(function () {

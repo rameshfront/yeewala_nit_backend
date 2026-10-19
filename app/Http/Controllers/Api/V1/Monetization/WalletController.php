@@ -216,21 +216,32 @@ class WalletController extends Controller
             $rzpResponse = \Illuminate\Support\Facades\Http::withBasicAuth($keyId, $keySecret)
                 ->timeout(10)
                 ->post('https://api.razorpay.com/v1/orders', [
-                    'amount'   => $amountMinor,
-                    'currency' => 'INR',
-                    'receipt'  => 'recharge_' . $user->id . '_' . time(),
+                    'amount'          => $amountMinor,
+                    'currency'        => 'INR',
+                    'payment_capture' => 1,
+                    'receipt'         => 'recharge_' . $user->id . '_' . time(),
                 ]);
 
             if ($rzpResponse->successful()) {
                 $gatewayOrderId = $rzpResponse->json('id');
+            } else {
+                \Illuminate\Support\Facades\Log::error('Razorpay order initiation failed: ' . $rzpResponse->body());
             }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Razorpay order initiation error: ' . $e->getMessage());
         }
 
-        // Fallback order ID if Razorpay network call times out
         if (!$gatewayOrderId) {
-            $gatewayOrderId = 'order_' . bin2hex(random_bytes(10));
+            return response()->json([
+                'data'   => null,
+                'meta'   => null,
+                'errors' => [
+                    [
+                        'code'    => 'PAYMENT_GATEWAY_ERROR',
+                        'message' => 'Unable to create payment order with Razorpay. Please verify keys and connection.',
+                    ],
+                ],
+            ], 502);
         }
 
         // Create recharge_request record
@@ -273,7 +284,30 @@ class WalletController extends Controller
         }
 
         $paymentId = $request->input('razorpay_payment_id');
+        $signature = $request->input('razorpay_signature');
+        $keySecret = env('RAZORPAY_KEY_SECRET', 'ADVWusim1YO3hLvbKY8QyfVB');
+
         $recharge = DB::table('recharge_requests')->where('id', $id)->where('user_id', $user->id)->first();
+        if (!$recharge) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'Recharge request not found']],
+            ], 404);
+        }
+
+        // Verify Razorpay HMAC-SHA256 signature if provided
+        $orderId = $recharge->transaction_reference;
+        if ($signature && $orderId && $paymentId && $keySecret) {
+            $expectedSignature = hash_hmac('sha256', $orderId . '|' . $paymentId, $keySecret);
+            if (!hash_equals($expectedSignature, $signature)) {
+                return response()->json([
+                    'data' => null,
+                    'meta' => null,
+                    'errors' => [['code' => 'INVALID_SIGNATURE', 'message' => 'Payment signature verification failed']],
+                ], 400);
+            }
+        }
 
         if ($recharge) {
             DB::table('recharge_requests')->where('id', $id)->update([
