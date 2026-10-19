@@ -129,7 +129,9 @@ class VideoController extends Controller
             'my_reaction' => $myReaction,
             'scheduled_at' => null,
             'published_at' => $v->published_at,
-            'thumbnail_url' => $v->thumbnail_path,
+            'thumbnail_url' => $v->thumbnail_path
+                ? (str_starts_with($v->thumbnail_path, 'http') ? $v->thumbnail_path : asset(ltrim($v->thumbnail_path, '/')))
+                : null,
             'sprite_url' => null,
             'manifest_url' => (isset($v->source_path) && (str_starts_with($v->source_path, 'http://') || str_starts_with($v->source_path, 'https://')))
                 ? $v->source_path
@@ -249,7 +251,9 @@ class VideoController extends Controller
                             'title' => $v->title,
                             'visibility' => $v->visibility,
                             'price_minor_units' => (int)($v->price_minor_units ?? 0),
-                            'thumbnail_url' => $v->thumbnail_path,
+                            'thumbnail_url' => $v->thumbnail_path
+                                ? (str_starts_with($v->thumbnail_path, 'http') ? $v->thumbnail_path : asset(ltrim($v->thumbnail_path, '/')))
+                                : null,
                             'creator' => [
                                 'id' => (int)$v->creator_profile_id,
                                 'user_id' => (int)$v->user_id,
@@ -512,6 +516,9 @@ class VideoController extends Controller
         $updates = [];
         if ($request->has('title')) {
             $updates['title'] = $request->input('title');
+        }
+        if ($request->has('thumbnail_path')) {
+            $updates['thumbnail_path'] = $request->input('thumbnail_path');
         }
         if ($request->has('description')) {
             $updates['description'] = $request->input('description');

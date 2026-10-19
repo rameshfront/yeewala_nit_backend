@@ -319,19 +319,25 @@ class UploadController extends Controller
                 Storage::disk('s3')->delete("uploads/{$uploadId}/chunk-{$i}");
             }
 
-            // Generate a thumbnail URL using the S3 public URL
-            $thumbnailUrl = null;
+            // Generate first-shot thumbnail URL from the uploaded video
             $s3Bucket = config('filesystems.disks.s3.bucket');
             $s3Region = config('filesystems.disks.s3.region');
             $sourceUrl = "https://{$s3Bucket}.s3.{$s3Region}.amazonaws.com/{$sourcePath}";
 
+            $thumbnailPath = \App\Services\Video\ThumbnailService::extractFirstFrame($sourceUrl, $session->video_id);
+
             // Update the Video row
-            DB::table('videos')->where('id', $session->video_id)->update([
+            $videoUpdates = [
                 'status'       => 'ready',
                 'source_path'  => $sourceUrl,
                 'review_status'=> 'pending_review',
                 'updated_at'   => now(),
-            ]);
+            ];
+            if ($thumbnailPath) {
+                $videoUpdates['thumbnail_path'] = $thumbnailPath;
+            }
+
+            DB::table('videos')->where('id', $session->video_id)->update($videoUpdates);
 
             // Mark upload session as completed
             $session->update(['status' => 'completed']);

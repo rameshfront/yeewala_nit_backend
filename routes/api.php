@@ -236,6 +236,10 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::get('/me/followers', [CreatorController::class, 'listFollowers']);
         Route::post('/creators/{id}/follow', [CreatorController::class, 'follow']);
         Route::delete('/creators/{id}/follow', [CreatorController::class, 'unfollow']);
+        Route::get('/creator/kyc-documents', [CreatorController::class, 'listKycDocuments']);
+        Route::post('/creator/kyc-documents', [CreatorController::class, 'uploadKycDocument']);
+        Route::get('/creator/bank-details', [CreatorController::class, 'getBankDetails']);
+        Route::post('/creator/bank-details', [CreatorController::class, 'saveBankDetails']);
 
         // Watch History Routes
         Route::get('/me/history', [HistoryController::class, 'index']);

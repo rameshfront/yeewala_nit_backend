@@ -383,4 +383,228 @@ class CreatorController extends Controller
             'updated_at' => $p->updated_at,
         ];
     }
+
+    /**
+     * Get or create creator profile helper.
+     */
+    private function getOrCreateCreatorProfile($userId, $userName = 'Creator')
+    {
+        $profile = DB::table('creator_profiles')->where('user_id', $userId)->first();
+        if (!$profile) {
+            $slug = Str::slug($userName) ?: 'user-' . $userId;
+            $count = DB::table('creator_profiles')->where('channel_slug', $slug)->count();
+            if ($count > 0) {
+                $slug .= '-' . $userId;
+            }
+            $profileId = DB::table('creator_profiles')->insertGetId([
+                'user_id' => $userId,
+                'channel_name' => $userName,
+                'channel_slug' => $slug,
+                'is_verified_badge' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $profile = DB::table('creator_profiles')->where('id', $profileId)->first();
+        }
+        return $profile;
+    }
+
+    /**
+     * List KYC documents for current creator.
+     */
+    public function listKycDocuments(Request $request)
+    {
+        $user = Auth::user() ?? auth('sanctum')->user();
+        if (!$user) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]], 401);
+        }
+
+        $profile = $this->getOrCreateCreatorProfile($user->id, $user->name);
+
+        $docs = DB::table('kyc_documents')
+            ->where('creator_profile_id', $profile->id)
+            ->orderBy('id', 'desc')
+            ->get()
+            ->map(fn($d) => [
+                'id' => (int)$d->id,
+                'doc_type' => $d->doc_type,
+                'original_filename' => $d->original_filename,
+                'mime_type' => $d->mime_type,
+                'size_bytes' => (int)$d->size_bytes,
+                'verification_status' => $d->verification_status ?? 'pending',
+                'version' => (int)($d->version ?? 1),
+                'is_current' => (bool)$d->is_current,
+                'created_at' => $d->created_at,
+            ]);
+
+        return response()->json([
+            'data' => $docs,
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Upload KYC document for current creator.
+     */
+    public function uploadKycDocument(Request $request)
+    {
+        $user = Auth::user() ?? auth('sanctum')->user();
+        if (!$user) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]], 401);
+        }
+
+        $validated = $request->validate([
+            'doc_type' => 'required|in:id_proof,address_proof',
+            'file' => 'required|file|mimes:jpeg,png,jpg,pdf|max:5120',
+        ]);
+
+        $profile = $this->getOrCreateCreatorProfile($user->id, $user->name);
+        $file = $request->file('file');
+        $path = $file->store('kyc_documents', 'local');
+
+        // Mark older documents of same type as not current
+        DB::table('kyc_documents')
+            ->where('creator_profile_id', $profile->id)
+            ->where('doc_type', $validated['doc_type'])
+            ->update(['is_current' => false]);
+
+        $currentVersion = DB::table('kyc_documents')
+            ->where('creator_profile_id', $profile->id)
+            ->where('doc_type', $validated['doc_type'])
+            ->count();
+
+        $id = DB::table('kyc_documents')->insertGetId([
+            'creator_profile_id' => $profile->id,
+            'doc_type' => $validated['doc_type'],
+            'disk_path' => $path,
+            'original_filename' => $file->getClientOriginalName(),
+            'mime_type' => $file->getClientMimeType(),
+            'size_bytes' => $file->getSize(),
+            'verification_status' => 'pending',
+            'version' => $currentVersion + 1,
+            'is_current' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $doc = DB::table('kyc_documents')->where('id', $id)->first();
+
+        return response()->json([
+            'data' => [
+                'id' => (int)$doc->id,
+                'doc_type' => $doc->doc_type,
+                'original_filename' => $doc->original_filename,
+                'mime_type' => $doc->mime_type,
+                'size_bytes' => (int)$doc->size_bytes,
+                'verification_status' => $doc->verification_status,
+                'version' => (int)$doc->version,
+                'is_current' => (bool)$doc->is_current,
+                'created_at' => $doc->created_at,
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Get bank details for current creator.
+     */
+    public function getBankDetails(Request $request)
+    {
+        $user = Auth::user() ?? auth('sanctum')->user();
+        if (!$user) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]], 401);
+        }
+
+        $profile = $this->getOrCreateCreatorProfile($user->id, $user->name);
+
+        $bank = DB::table('bank_details')
+            ->where('creator_profile_id', $profile->id)
+            ->where('is_current', true)
+            ->first();
+
+        if (!$bank) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'Bank details not found']],
+            ], 404);
+        }
+
+        $acc = (string)$bank->account_number;
+        $masked = strlen($acc) > 4 ? str_repeat('•', max(0, strlen($acc) - 4)) . substr($acc, -4) : $acc;
+
+        return response()->json([
+            'data' => [
+                'id' => (int)$bank->id,
+                'bank_name' => $bank->bank_name ?? '',
+                'account_holder_name' => $bank->account_holder_name,
+                'masked_account_number' => $masked,
+                'ifsc_code' => $bank->ifsc_code,
+                'is_current' => (bool)$bank->is_current,
+                'created_at' => $bank->created_at,
+                'updated_at' => $bank->updated_at,
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Save bank details for current creator.
+     */
+    public function saveBankDetails(Request $request)
+    {
+        $user = Auth::user() ?? auth('sanctum')->user();
+        if (!$user) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]], 401);
+        }
+
+        $validated = $request->validate([
+            'bank_name' => 'required|string|min:2|max:255',
+            'account_holder_name' => 'required|string|min:2|max:255',
+            'account_number' => 'required|string|regex:/^\d{9,18}$/',
+            'ifsc_code' => 'required|string|regex:/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/',
+            'pan_number' => 'nullable|string|max:20',
+        ]);
+
+        $profile = $this->getOrCreateCreatorProfile($user->id, $user->name);
+
+        // Mark previous bank details as not current
+        DB::table('bank_details')
+            ->where('creator_profile_id', $profile->id)
+            ->update(['is_current' => false]);
+
+        $id = DB::table('bank_details')->insertGetId([
+            'creator_profile_id' => $profile->id,
+            'bank_name' => $validated['bank_name'],
+            'account_holder_name' => $validated['account_holder_name'],
+            'account_number' => $validated['account_number'],
+            'ifsc_code' => strtoupper($validated['ifsc_code']),
+            'pan_number' => !empty($validated['pan_number']) ? strtoupper($validated['pan_number']) : null,
+            'is_current' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $bank = DB::table('bank_details')->where('id', $id)->first();
+        $acc = (string)$bank->account_number;
+        $masked = strlen($acc) > 4 ? str_repeat('•', max(0, strlen($acc) - 4)) . substr($acc, -4) : $acc;
+
+        return response()->json([
+            'data' => [
+                'id' => (int)$bank->id,
+                'bank_name' => $bank->bank_name ?? '',
+                'account_holder_name' => $bank->account_holder_name,
+                'masked_account_number' => $masked,
+                'ifsc_code' => $bank->ifsc_code,
+                'is_current' => (bool)$bank->is_current,
+                'created_at' => $bank->created_at,
+                'updated_at' => $bank->updated_at,
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
 }
