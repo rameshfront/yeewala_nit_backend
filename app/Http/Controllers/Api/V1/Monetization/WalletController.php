@@ -125,18 +125,69 @@ class WalletController extends Controller
         }
 
         $purchases = DB::table('video_purchases')
-            ->where('user_id', $user->id)
+            ->leftJoin('videos', 'video_purchases.video_id', '=', 'videos.id')
+            ->leftJoin('creator_profiles', 'videos.creator_profile_id', '=', 'creator_profiles.id')
+            ->where('video_purchases.user_id', $user->id)
+            ->orderBy('video_purchases.purchased_at', 'desc')
+            ->select([
+                'video_purchases.id as purchase_id',
+                'video_purchases.user_id',
+                'video_purchases.video_id',
+                'video_purchases.price_minor_units',
+                'video_purchases.currency',
+                'video_purchases.purchased_at',
+                'videos.title',
+                'videos.type',
+                'videos.thumbnail_path',
+                'videos.creator_profile_id',
+                'creator_profiles.id as cp_id',
+                'creator_profiles.user_id as cp_user_id',
+                'creator_profiles.channel_name',
+                'creator_profiles.channel_slug',
+                'creator_profiles.avatar_path',
+                'creator_profiles.is_verified_badge',
+            ])
             ->get()
-            ->map(fn($p) => [
-                'id' => (int)$p->id,
-                'user_id' => (int)$p->user_id,
-                'video_id' => (int)$p->video_id,
-                'price_minor_units' => (int)$p->price_minor_units,
-                'currency' => $p->currency,
-                'purchased_at' => $p->purchased_at,
-                'created_at' => $p->created_at,
-                'updated_at' => $p->updated_at,
-            ]);
+            ->map(function ($p) {
+                $thumbnailUrl = $p->thumbnail_path;
+                if ($thumbnailUrl && !str_starts_with($thumbnailUrl, 'http://') && !str_starts_with($thumbnailUrl, 'https://')) {
+                    $baseUrl = rtrim(config('app.url', 'http://localhost:8000'), '/');
+                    if (!str_starts_with($thumbnailUrl, '/storage/') && !str_starts_with($thumbnailUrl, 'storage/')) {
+                        $thumbnailUrl = '/storage/' . ltrim($thumbnailUrl, '/');
+                    }
+                    $thumbnailUrl = $baseUrl . '/' . ltrim($thumbnailUrl, '/');
+                }
+
+                $avatarUrl = $p->avatar_path ?? null;
+                if ($avatarUrl && !str_starts_with($avatarUrl, 'http://') && !str_starts_with($avatarUrl, 'https://')) {
+                    $baseUrl = rtrim(config('app.url', 'http://localhost:8000'), '/');
+                    if (!str_starts_with($avatarUrl, '/storage/') && !str_starts_with($avatarUrl, 'storage/')) {
+                        $avatarUrl = '/storage/' . ltrim($avatarUrl, '/');
+                    }
+                    $avatarUrl = $baseUrl . '/' . ltrim($avatarUrl, '/');
+                }
+
+                return [
+                    'id' => (int)$p->purchase_id,
+                    'user_id' => (int)$p->user_id,
+                    'video_id' => (int)$p->video_id,
+                    'title' => $p->title ?? ('Video #' . $p->video_id),
+                    'type' => $p->type ?? 'long_form',
+                    'thumbnail_url' => $thumbnailUrl,
+                    'creator' => $p->creator_profile_id ? [
+                        'id' => (int)$p->cp_id,
+                        'user_id' => (int)$p->cp_user_id,
+                        'channel_name' => $p->channel_name ?? 'Yeewala Creator',
+                        'channel_slug' => $p->channel_slug ?? 'creator',
+                        'avatar_url' => $avatarUrl,
+                        'is_verified_badge' => (bool)($p->is_verified_badge ?? false),
+                    ] : null,
+                    'price_minor_units' => (int)$p->price_minor_units,
+                    'currency' => $p->currency ?? 'INR',
+                    'purchased_at' => $p->purchased_at,
+                    'source' => 'wallet',
+                ];
+            });
 
         return response()->json([
             'data' => $purchases,
