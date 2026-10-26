@@ -259,8 +259,8 @@ class WalletController extends Controller
         $amountDecimal = number_format($amountMinor / 100.0, 2, '.', '');
 
         // Generate Razorpay Order
-        $keyId = env('RAZORPAY_KEY_ID', 'rzp_live_DrmCn9LyTbOEwb');
-        $keySecret = env('RAZORPAY_KEY_SECRET', 'ADVWusim1YO3hLvbKY8QyfVB');
+        $keyId = config('services.razorpay.key_id') ?: env('RAZORPAY_KEY_ID', 'rzp_live_DrmCn9LyTbOEwb');
+        $keySecret = config('services.razorpay.key_secret') ?: env('RAZORPAY_KEY_SECRET', 'ADVWusim1YO3hLvbKY8QyfVB');
         $gatewayOrderId = null;
 
         try {
@@ -336,7 +336,7 @@ class WalletController extends Controller
 
         $paymentId = $request->input('razorpay_payment_id');
         $signature = $request->input('razorpay_signature');
-        $keySecret = env('RAZORPAY_KEY_SECRET', 'ADVWusim1YO3hLvbKY8QyfVB');
+        $keySecret = config('services.razorpay.key_secret') ?: env('RAZORPAY_KEY_SECRET', 'ADVWusim1YO3hLvbKY8QyfVB');
 
         $recharge = DB::table('recharge_requests')->where('id', $id)->where('user_id', $user->id)->first();
         if (!$recharge) {

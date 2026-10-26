@@ -37,4 +37,11 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'razorpay' => [
+        'key_id' => env('RAZORPAY_KEY_ID', 'rzp_live_DrmCn9LyTbOEwb'),
+        'key_secret' => env('RAZORPAY_KEY_SECRET', 'ADVWusim1YO3hLvbKY8QyfVB'),
+        'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET'),
+    ],
+
 ];
+
