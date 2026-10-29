@@ -350,6 +350,7 @@ class WalletController extends Controller
         // Verify Razorpay HMAC-SHA256 signature if provided
         $orderId = $recharge->transaction_reference;
         if ($signature && $orderId && $paymentId && $keySecret) {
+            \Illuminate\Support\Facades\Log::info("Verifying Razorpay payment for topup {$id}: Order={$orderId}, Payment={$paymentId}");
             $expectedSignature = hash_hmac('sha256', $orderId . '|' . $paymentId, $keySecret);
             if (!hash_equals($expectedSignature, $signature)) {
                 return response()->json([

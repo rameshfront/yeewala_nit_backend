@@ -26,10 +26,25 @@ use App\Http\Controllers\Api\V1\Admin\AdminMonetizationController;
 use App\Http\Controllers\Api\V1\Location\LocationController;
 use Illuminate\Support\Facades\Route;
 
+Route::post('/analytics/events', function (\Illuminate\Http\Request $request) {
+    return response()->json([
+        'data' => ['accepted' => count($request->input('events', []))],
+        'meta' => null,
+        'errors' => null,
+    ]);
+});
+
 Route::prefix('v1')->middleware('throttle:api')->group(function () {
     // Public Location Routes (Countries & States)
     Route::get('/countries', [LocationController::class, 'countries']);
     Route::get('/countries/{countryId}/states', [LocationController::class, 'states']);
+    Route::post('/analytics/events', function (\Illuminate\Http\Request $request) {
+        return response()->json([
+            'data' => ['accepted' => count($request->input('events', []))],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    });
 
     Route::middleware(['auth:sanctum'])->group(function () {
         // Admin Profile & Identity

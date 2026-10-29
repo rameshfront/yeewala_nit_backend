@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/*',
             'sanctum/csrf-cookie',
         ]);
+        $middleware->redirectGuestsTo(fn () => route('login'));
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // 1. Validation Errors (422 Unprocessable Content)

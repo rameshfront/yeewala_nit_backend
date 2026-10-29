@@ -11,6 +11,14 @@ Route::get('/', function () {
     ]);
 });
 
+Route::get('/login', function () {
+    return response()->json([
+        'data' => null,
+        'meta' => null,
+        'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated. Please log in.']]
+    ], 401);
+})->name('login');
+
 Route::get('/sanctum/csrf-cookie', function () {
     return response()->noContent();
 });
