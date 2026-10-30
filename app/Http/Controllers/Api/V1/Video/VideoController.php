@@ -148,6 +148,13 @@ class VideoController extends Controller
             ->select('videos.*', 'creator_profiles.user_id', 'creator_profiles.channel_name', 'creator_profiles.channel_slug', 'creator_profiles.avatar_path', 'creator_profiles.is_verified_badge')
             ->whereNull('videos.deleted_at');
 
+        // Ensure only approved videos appear in public index unless explicitly querying review_status
+        if (!$request->filled('review_status')) {
+            $query->where(function($q) {
+                $q->where('videos.review_status', 'approved')->orWhereNull('videos.review_status');
+            });
+        }
+
         if ($request->filled('type')) {
             $query->where('videos.type', $request->query('type'));
         }
@@ -190,6 +197,13 @@ class VideoController extends Controller
             ->where('videos.creator_profile_id', $creatorProfile->id)
             ->whereNull('videos.deleted_at');
 
+        // Ensure only approved videos appear in public index unless explicitly querying review_status
+        if (!$request->filled('review_status')) {
+            $query->where(function($q) {
+                $q->where('videos.review_status', 'approved')->orWhereNull('videos.review_status');
+            });
+        }
+
         if ($request->filled('type')) {
             $query->where('videos.type', $request->query('type'));
         }
@@ -230,7 +244,7 @@ class VideoController extends Controller
         }
 
         $user = auth('sanctum')->user() ?? auth('web')->user();
-        $isPaid = $v->visibility === 'paid' || ((int)($v->price_minor_units ?? 0)) > 0;
+        $isPaid = $v->visibility === 'paid' && ((int)($v->price_minor_units ?? 0)) > 0;
         $isOwner = $user && $user->id === (int)$v->user_id;
 
         if ($isPaid && !$isOwner) {
@@ -282,9 +296,29 @@ class VideoController extends Controller
         ]);
     }
 
-    public function homeFeed()
+    public function homeFeed(Request $request)
     {
-        return $this->index(new Request());
+        $query = DB::table('videos')
+            ->join('creator_profiles', 'videos.creator_profile_id', '=', 'creator_profiles.id')
+            ->select('videos.*', 'creator_profiles.user_id', 'creator_profiles.channel_name', 'creator_profiles.channel_slug', 'creator_profiles.avatar_path', 'creator_profiles.is_verified_badge')
+            ->whereNull('videos.deleted_at')
+            ->where(function($q) {
+                $q->where('videos.review_status', 'approved')->orWhereNull('videos.review_status');
+            });
+
+        if ($request->filled('type')) {
+            $query->where('videos.type', $request->query('type'));
+        }
+
+        // Randomize feed display so fresh varied videos appear on every page refresh
+        $videos = $query->inRandomOrder()->take(50)->get();
+        $formatted = $videos->map(fn($v) => $this->formatVideo($v))->toArray();
+
+        return response()->json([
+            'data' => $formatted,
+            'meta' => ['pagination' => ['next_cursor' => null, 'per_page' => count($formatted)]],
+            'errors' => null,
+        ]);
     }
 
     public function trendingFeed()
@@ -341,6 +375,13 @@ class VideoController extends Controller
             ->whereIn('videos.creator_profile_id', $followedCreatorIds)
             ->whereNull('videos.deleted_at');
 
+        // Ensure only approved videos appear in public index unless explicitly querying review_status
+        if (!$request->filled('review_status')) {
+            $query->where(function($q) {
+                $q->where('videos.review_status', 'approved')->orWhereNull('videos.review_status');
+            });
+        }
+
         if ($request->filled('type')) {
             $query->where('videos.type', $request->query('type'));
         }
@@ -389,6 +430,13 @@ class VideoController extends Controller
                 if (!empty($tagVideoIds)) {
                     $sub->orWhereIn('videos.id', $tagVideoIds);
                 }
+            });
+        }
+
+        // Ensure only approved videos appear in public index unless explicitly querying review_status
+        if (!$request->filled('review_status')) {
+            $query->where(function($q) {
+                $q->where('videos.review_status', 'approved')->orWhereNull('videos.review_status');
             });
         }
 
