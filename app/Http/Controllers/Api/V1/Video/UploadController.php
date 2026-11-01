@@ -21,7 +21,7 @@ class UploadController extends Controller
     /**
      * How many hours an upload session stays alive before expiry.
      */
-    private const SESSION_TTL_HOURS = 6;
+    private const SESSION_TTL_HOURS = 24;
 
     /**
      * Allowed MIME types for video uploads.
@@ -215,7 +215,10 @@ class UploadController extends Controller
             $received[] = $chunkIndex;
             sort($received);
         }
-        $session->update(['received_chunks' => $received]);
+        $session->update([
+            'received_chunks' => $received,
+            'expires_at'      => now()->addHours(self::SESSION_TTL_HOURS),
+        ]);
 
         return response()->json([
             'data' => $this->formatSession($session->fresh()),
