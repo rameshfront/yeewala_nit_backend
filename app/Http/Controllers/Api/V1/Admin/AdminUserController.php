@@ -71,6 +71,12 @@ class AdminUserController extends Controller
                 'warning_count' => 0,
                 'last_login_at' => $u->last_login_at ?? $u->updated_at ?? $u->created_at,
                 'created_at' => $u->created_at,
+                'amount' => number_format((float)($u->amount ?? 0), 2, '.', ''),
+                'earnings' => number_format((float)($u->earnings ?? 0), 2, '.', ''),
+                'actualearning' => number_format((float)($u->actualearning ?? 0), 2, '.', ''),
+                'available_balance_minor_units' => (int)round((float)($u->amount ?? 0) * 100),
+                'pending_balance_minor_units' => (int)round((float)($u->earnings ?? 0) * 100),
+                'withdrawable_balance_minor_units' => (int)round((float)($u->actualearning ?? 0) * 100),
             ];
         })->toArray();
 
@@ -80,6 +86,12 @@ class AdminUserController extends Controller
                 'pagination' => [
                     'next_cursor' => null,
                     'per_page' => count($formatted),
+                    'total' => count($formatted),
+                ],
+                'summary' => [
+                    'total_available_minor_units' => (int)round((float)$users->sum('amount') * 100),
+                    'total_pending_minor_units' => (int)round((float)$users->sum('earnings') * 100),
+                    'total_withdrawable_minor_units' => (int)round((float)$users->sum('actualearning') * 100),
                 ],
             ],
             'errors' => null,
