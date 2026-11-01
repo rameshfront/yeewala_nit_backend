@@ -255,6 +255,9 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::post('/creator/kyc-documents', [CreatorController::class, 'uploadKycDocument']);
         Route::get('/creator/bank-details', [CreatorController::class, 'getBankDetails']);
         Route::post('/creator/bank-details', [CreatorController::class, 'saveBankDetails']);
+        Route::get('/creator/wallet', [CreatorController::class, 'getCreatorWallet']);
+        Route::get('/creator/withdrawals', [CreatorController::class, 'getWithdrawals']);
+        Route::post('/creator/withdrawals', [CreatorController::class, 'requestWithdrawal']);
 
         // Watch History Routes
         Route::get('/me/history', [HistoryController::class, 'index']);

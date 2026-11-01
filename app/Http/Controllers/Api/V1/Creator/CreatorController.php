@@ -607,4 +607,173 @@ class CreatorController extends Controller
             'errors' => null,
         ]);
     }
+    /**
+     * Get current creator's wallet with withdrawable balance.
+     */
+    public function getCreatorWallet(Request $request)
+    {
+        $user = Auth::user() ?? auth('sanctum')->user();
+        if (!$user) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]], 401);
+        }
+
+        $profile = $this->getOrCreateCreatorProfile($user->id, $user->name);
+        $freshUser = DB::table('users')->where('id', $user->id)->first();
+
+        $amount = (float)($freshUser->amount ?? 0);
+        $earnings = (float)($freshUser->earnings ?? 0);
+        $actualearning = (float)($freshUser->actualearning ?? 0);
+
+        return response()->json([
+            'data' => [
+                'id' => (int)$profile->id,
+                'type' => 'creator',
+                'currency' => 'INR',
+                'pending_balance_minor_units' => (int)round($earnings * 100),
+                'available_balance_minor_units' => (int)round($amount * 100),
+                'withdrawable_balance_minor_units' => (int)round($actualearning * 100),
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * List withdrawal requests for current creator.
+     */
+    public function getWithdrawals(Request $request)
+    {
+        $user = Auth::user() ?? auth('sanctum')->user();
+        if (!$user) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]], 401);
+        }
+
+        $profile = $this->getOrCreateCreatorProfile($user->id, $user->name);
+
+        $items = DB::table('withdrawal_requests')
+            ->where('wallet_id', $profile->id)
+            ->orderBy('id', 'desc')
+            ->get()
+            ->map(function ($w) {
+                return [
+                    'id' => (int)$w->id,
+                    'amount_minor_units' => (int)$w->amount_minor_units,
+                    'status' => $w->status ?? 'pending',
+                    'requested_at' => $w->requested_at ? \Carbon\Carbon::parse($w->requested_at)->toIso8601String() : \Carbon\Carbon::parse($w->created_at)->toIso8601String(),
+                    'rejection_reason' => $w->rejection_reason,
+                    'payout_reference' => $w->payout_reference,
+                    'processed_at' => $w->processed_at ? \Carbon\Carbon::parse($w->processed_at)->toIso8601String() : null,
+                ];
+            });
+
+        return response()->json([
+            'data' => $items,
+            'meta' => [
+                'pagination' => [
+                    'next_cursor' => null,
+                    'per_page' => count($items),
+                ],
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Request a withdrawal from actualearning balance.
+     */
+    public function requestWithdrawal(Request $request)
+    {
+        $user = Auth::user() ?? auth('sanctum')->user();
+        if (!$user) {
+            return response()->json(['data' => null, 'meta' => null, 'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]], 401);
+        }
+
+        $validated = $request->validate([
+            'amount_minor_units' => 'required|integer|min:1',
+        ]);
+
+        $profile = $this->getOrCreateCreatorProfile($user->id, $user->name);
+
+        // Check if creator has current bank details
+        $bankDetail = DB::table('bank_details')
+            ->where('creator_profile_id', $profile->id)
+            ->where('is_current', true)
+            ->first();
+
+        if (!$bankDetail) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'BANK_DETAILS_REQUIRED', 'message' => 'Please add bank payout details before requesting a withdrawal.']],
+            ], 422);
+        }
+
+        $amountMinorUnits = (int)$validated['amount_minor_units'];
+        $amountDecimal = round($amountMinorUnits / 100, 2);
+
+        return DB::transaction(function () use ($user, $profile, $bankDetail, $amountMinorUnits, $amountDecimal) {
+            $freshUser = DB::table('users')->where('id', $user->id)->lockForUpdate()->first();
+            $actualEarning = (float)($freshUser->actualearning ?? 0);
+
+            if ($actualEarning <= 0) {
+                return response()->json([
+                    'data' => null,
+                    'meta' => null,
+                    'errors' => [['code' => 'INSUFFICIENT_BALANCE', 'message' => 'No balance available for withdrawal.']],
+                ], 422);
+            }
+
+            if ($amountDecimal > $actualEarning) {
+                return response()->json([
+                    'data' => null,
+                    'meta' => null,
+                    'errors' => [['code' => 'INSUFFICIENT_BALANCE', 'message' => "Withdrawal amount (₹{$amountDecimal}) exceeds available withdrawable balance (₹{$actualEarning})."]],
+                ], 422);
+            }
+
+            // Deduct from actualearning
+            $newActual = max(0, $actualEarning - $amountDecimal);
+            DB::table('users')->where('id', $user->id)->update([
+                'actualearning' => number_format($newActual, 2, '.', ''),
+                'updated_at' => now(),
+            ]);
+
+            $now = now();
+
+            // Insert into withdrawal_requests
+            $requestId = DB::table('withdrawal_requests')->insertGetId([
+                'wallet_id' => $profile->id,
+                'bank_detail_id' => $bankDetail->id,
+                'amount_minor_units' => $amountMinorUnits,
+                'status' => 'pending',
+                'requested_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            // Also insert into withdraw_requests for WalletService/Admin compatibility
+            if (\Illuminate\Support\Facades\Schema::hasTable('withdraw_requests')) {
+                DB::table('withdraw_requests')->insert([
+                    'user_id' => $user->id,
+                    'amount' => $amountDecimal,
+                    'status' => 'pending',
+                    'bank_info' => ($bankDetail->bank_name ?? 'Bank') . ' - ' . ($bankDetail->account_number ?? ''),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+
+            return response()->json([
+                'data' => [
+                    'id' => (int)$requestId,
+                    'amount_minor_units' => $amountMinorUnits,
+                    'status' => 'pending',
+                    'requested_at' => $now->toIso8601String(),
+                    'rejection_reason' => null,
+                ],
+                'meta' => null,
+                'errors' => null,
+            ], 201);
+        });
+    }
 }
