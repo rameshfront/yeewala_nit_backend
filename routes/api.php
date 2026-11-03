@@ -164,6 +164,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::get('/videos', [VideoController::class, 'index']);
     Route::get('/videos/{id}', [VideoController::class, 'show'])->whereNumber('id');
     Route::get('/videos/{id}/renditions', [VideoController::class, 'renditions'])->whereNumber('id');
+    Route::post('/contact', [\App\Http\Controllers\Api\V1\Common\ContactController::class, 'submitMessage']);
     Route::get('/feed/home', [VideoController::class, 'homeFeed']);
     Route::get('/feed/trending', [VideoController::class, 'trendingFeed']);
     Route::get('/feed/latest', [VideoController::class, 'latestFeed']);
@@ -194,6 +195,9 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::patch('/me', [AuthController::class, 'updateProfile']);
         Route::post('/me/avatar', [AuthController::class, 'updateAvatar']);
+        Route::get('/auth/sessions', [AuthController::class, 'listSessions']);
+        Route::delete('/auth/sessions/{id}', [AuthController::class, 'revokeSession']);
+        Route::patch('/me/password', [AuthController::class, 'updatePassword']);
 
         // Email & Phone Verification (needs auth)
         Route::post('/auth/email/resend', [AuthController::class, 'resendVerificationEmail']);

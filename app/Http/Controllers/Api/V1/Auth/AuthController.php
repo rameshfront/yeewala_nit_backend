@@ -316,6 +316,106 @@ class AuthController extends Controller
         ]);
     }
 
+    public function updatePassword(Request $request)
+    {
+        /** @var User|null $user */
+        $user = $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'UNAUTHENTICATED', 'message' => 'Unauthenticated']]
+            ], 401);
+        }
+
+        $validated = $request->validate([
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        if (!Hash::check($validated['current_password'], $user->password)) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'INVALID_PASSWORD', 'message' => 'Current password is incorrect.', 'field' => 'current_password']]
+            ], 422);
+        }
+
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        return response()->json([
+            'data' => ['message' => 'Password updated successfully.'],
+            'meta' => null,
+            'errors' => null
+        ]);
+    }
+
+    
+    public function listSessions(Request $request)
+    {
+        /** @var User|null $user */
+        $user = $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'data' => [],
+                'meta' => null,
+                'errors' => null,
+            ]);
+        }
+
+        $sessions = [];
+        if (\IlluminateSupportFacadesSchema::hasTable('sessions')) {
+            $dbSessions = \IlluminateSupportFacadesDB::table('sessions')
+                ->where('user_id', $user->id)
+                ->orderBy('last_activity', 'desc')
+                ->get();
+
+            $currentSessionId = $request->session() ? $request->session()->getId() : null;
+
+            foreach ($dbSessions as $s) {
+                $sessions[] = [
+                    'id' => (string)$s->id,
+                    'ip_address' => $s->ip_address,
+                    'user_agent' => $s->user_agent,
+                    'last_active_at' => date('c', $s->last_activity),
+                    'is_current_device' => $currentSessionId ? $s->id === $currentSessionId : false,
+                ];
+            }
+        }
+
+        if (empty($sessions)) {
+            $sessions[] = [
+                'id' => 'current',
+                'ip_address' => $request->ip() ?: '127.0.0.1',
+                'user_agent' => $request->userAgent() ?: 'Current Browser / Windows Desktop',
+                'last_active_at' => now()->toIso8601String(),
+                'is_current_device' => true,
+            ];
+        }
+
+        return response()->json([
+            'data' => $sessions,
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    public function revokeSession(Request $request, $id)
+    {
+        if (\IlluminateSupportFacadesSchema::hasTable('sessions')) {
+            \IlluminateSupportFacadesDB::table('sessions')->where('id', $id)->delete();
+        }
+
+        return response()->json([
+            'data' => ['message' => 'Session signed out.'],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
     public function resendVerificationEmail(Request $request)
     {
         /** @var User|null $user */

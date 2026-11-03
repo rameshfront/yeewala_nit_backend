@@ -262,7 +262,7 @@ class AdminMonetizationController extends Controller
                         'requested_amount' => (float)$recharge->requested_amount,
                         'amount' => $approvedAmount,
                         'recharge_id' => (int)$recharge->id,
-                        'message' => "Your wallet top-up request has been approved! ₹{$approvedAmount} has been credited to your wallet balance (Paid: ₹{$recharge->requested_amount}).",
+                        'message' => "Your wallet top-up request has been approved and credited.",
                     ]),
                     'read_at' => null,
                     'created_at' => now(),
