@@ -88,26 +88,94 @@ class WalletController extends Controller
         $transactions = DB::table('wallet_transactions')
             ->where('wallet_id', $wallet->id)
             ->orderBy('id', 'desc')
-            ->get()
-            ->map(function ($t) {
-                return [
-                    'id' => (int)$t->id,
-                    'wallet_id' => (int)$t->wallet_id,
-                    'type' => $t->type,
-                    'category' => $t->category ?? 'purchase',
-                    'amount_minor_units' => (int)$t->amount_minor_units,
-                    'status' => $t->status ?? 'cleared',
-                    'description' => $t->description ?? '',
-                    'created_at' => $t->created_at,
-                ];
-            });
+            ->get();
+
+        // Collect all video IDs referenced in transaction descriptions
+        $videoIdsToLookup = [];
+        foreach ($transactions as $t) {
+            $desc = $t->description ?? '';
+            if (preg_match('/(?:Purchase of videos?:\s*|#)([0-9,\s]+)/i', $desc, $vMatch)) {
+                $ids = array_filter(array_map('trim', explode(',', $vMatch[1])));
+                foreach ($ids as $id) {
+                    if (is_numeric($id)) $videoIdsToLookup[] = (int)$id;
+                }
+            }
+        }
+
+        $videoTitlesMap = [];
+        if (!empty($videoIdsToLookup)) {
+            $videoTitlesMap = DB::table('videos')
+                ->whereIn('id', array_unique($videoIdsToLookup))
+                ->pluck('title', 'id')
+                ->toArray();
+        }
+
+        $mapped = $transactions->map(function ($t) use ($videoTitlesMap) {
+            $amountMinor = (int)$t->amount_minor_units;
+            $description = $t->description ?? '';
+            $category = $t->category ?? 'purchase';
+
+            // 1. For Topup: Show only student amount, do not show admin credited amount
+            if (preg_match('/Requested:\s*₹?([0-9]+(?:\.[0-9]+)?)/i', $description, $reqMatch)) {
+                $reqAmount = (float)$reqMatch[1];
+                if ($reqAmount > 0) {
+                    $amountMinor = (int)round($reqAmount * 100);
+                }
+                if (preg_match('/Ref:\s*([^)]+)/i', $description, $refMatch)) {
+                    $description = 'Wallet recharge (Ref: ' . trim($refMatch[1]) . ')';
+                } else {
+                    $description = 'Wallet recharge';
+                }
+            } elseif (preg_match('/Wallet recharge approved:\s*₹?[0-9.]+\s*credited/i', $description)) {
+                if (preg_match('/Ref:\s*([^)]+)/i', $description, $refMatch)) {
+                    $description = 'Wallet recharge (Ref: ' . trim($refMatch[1]) . ')';
+                } else {
+                    $description = 'Wallet recharge';
+                }
+            }
+
+            // 2. Change category 'purchase' to 'added'
+            if (strtolower($category) === 'purchase') {
+                $category = 'added';
+            }
+
+            // 3. Resolve video ID to video title in description
+            if (preg_match('/Purchase of videos?:\s*([0-9,\s]+)/i', $description, $vMatch)) {
+                $vIds = array_filter(array_map('trim', explode(',', $vMatch[1])));
+                $titles = [];
+                foreach ($vIds as $vid) {
+                    if (isset($videoTitlesMap[$vid])) {
+                        $titles[] = $videoTitlesMap[$vid];
+                    }
+                }
+                if (!empty($titles)) {
+                    $description = implode(', ', $titles);
+                }
+            } elseif (preg_match('/Purchase of video\s*#?([0-9]+)/i', $description, $vMatch)) {
+                $vId = (int)$vMatch[1];
+                if (isset($videoTitlesMap[$vId])) {
+                    $description = $videoTitlesMap[$vId];
+                }
+            }
+
+            return [
+                'id' => (int)$t->id,
+                'wallet_id' => (int)$t->wallet_id,
+                'type' => $t->type,
+                'category' => $category,
+                'amount_minor_units' => $amountMinor,
+                'status' => $t->status ?? 'cleared',
+                'description' => $description,
+                'created_at' => $t->created_at,
+            ];
+        });
 
         return response()->json([
-            'data' => $transactions,
+            'data' => $mapped,
             'meta' => [
                 'pagination' => [
                     'next_cursor' => null,
-                    'per_page' => count($transactions),
+                    'per_page' => count($mapped),
                 ],
             ],
             'errors' => null,

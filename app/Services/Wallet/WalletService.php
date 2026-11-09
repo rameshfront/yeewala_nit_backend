@@ -202,13 +202,15 @@ class WalletService
             if (Schema::hasTable('wallets') && Schema::hasTable('wallet_transactions')) {
                 $wallet = DB::table('wallets')->where('owner_id', $buyerId)->where('type', 'user')->first();
                 if ($wallet) {
+                    $videoTitles = DB::table('videos')->whereIn('id', $videoIds)->pluck('title')->toArray();
+                    $desc = !empty($videoTitles) ? implode(', ', $videoTitles) : ('Video #' . implode(', ', $videoIds));
                     DB::table('wallet_transactions')->insert([
                         'wallet_id'          => $wallet->id,
                         'type'               => 'debit',
-                        'category'           => 'purchase',
+                        'category'           => 'added',
                         'amount_minor_units' => (int)bcmul($total, '100', 0),
                         'status'             => 'cleared',
-                        'description'        => 'Purchase of videos: ' . implode(', ', $videoIds),
+                        'description'        => $desc,
                         'created_at'         => $now,
                         'updated_at'         => $now,
                     ]);

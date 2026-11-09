@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -367,13 +368,13 @@ class AuthController extends Controller
         }
 
         $sessions = [];
-        if (\IlluminateSupportFacadesSchema::hasTable('sessions')) {
-            $dbSessions = \IlluminateSupportFacadesDB::table('sessions')
+        if (Schema::hasTable('sessions')) {
+            $dbSessions = DB::table('sessions')
                 ->where('user_id', $user->id)
                 ->orderBy('last_activity', 'desc')
                 ->get();
 
-            $currentSessionId = $request->session() ? $request->session()->getId() : null;
+            $currentSessionId = $request->hasSession() ? $request->session()->getId() : null;
 
             foreach ($dbSessions as $s) {
                 $sessions[] = [
@@ -405,8 +406,8 @@ class AuthController extends Controller
 
     public function revokeSession(Request $request, $id)
     {
-        if (\IlluminateSupportFacadesSchema::hasTable('sessions')) {
-            \IlluminateSupportFacadesDB::table('sessions')->where('id', $id)->delete();
+        if (Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('id', $id)->delete();
         }
 
         return response()->json([
