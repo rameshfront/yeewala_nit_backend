@@ -408,14 +408,23 @@ class VideoController extends Controller
 
     public function searchVideos(Request $request)
     {
-        $q = $request->query('q');
+        $q = trim((string)$request->query('q', ''));
 
         $query = DB::table('videos')
             ->join('creator_profiles', 'videos.creator_profile_id', '=', 'creator_profiles.id')
-            ->select('videos.*', 'creator_profiles.user_id', 'creator_profiles.channel_name', 'creator_profiles.channel_slug', 'creator_profiles.avatar_path', 'creator_profiles.is_verified_badge')
+            ->leftJoin('users', 'creator_profiles.user_id', '=', 'users.id')
+            ->leftJoin('categories', 'videos.category_id', '=', 'categories.id')
+            ->select(
+                'videos.*',
+                'creator_profiles.user_id',
+                'creator_profiles.channel_name',
+                'creator_profiles.channel_slug',
+                'creator_profiles.avatar_path',
+                'creator_profiles.is_verified_badge'
+            )
             ->whereNull('videos.deleted_at');
 
-        if ($q) {
+        if ($q !== '') {
             $tagVideoIds = DB::table('video_tag')
                 ->join('tags', 'video_tag.tag_id', '=', 'tags.id')
                 ->where('tags.name', 'LIKE', '%' . $q . '%')
@@ -424,9 +433,29 @@ class VideoController extends Controller
                 ->toArray();
 
             $query->where(function ($sub) use ($q, $tagVideoIds) {
+                // 1. Title & Description
                 $sub->where('videos.title', 'LIKE', '%' . $q . '%')
-                    ->orWhere('videos.description', 'LIKE', '%' . $q . '%');
+                    ->orWhere('videos.description', 'LIKE', '%' . $q . '%')
+                    // 2. Student / Creator / Channel Name
+                    ->orWhere('creator_profiles.channel_name', 'LIKE', '%' . $q . '%')
+                    ->orWhere('users.name', 'LIKE', '%' . $q . '%')
+                    ->orWhere('users.email', 'LIKE', '%' . $q . '%')
+                    // 3. Category Name
+                    ->orWhere('categories.name', 'LIKE', '%' . $q . '%')
+                    // 4. Post Date / Published Date
+                    ->orWhere('videos.created_at', 'LIKE', '%' . $q . '%')
+                    ->orWhere('videos.published_at', 'LIKE', '%' . $q . '%');
 
+                // 5. Numbers / Video ID match (e.g. searching '1', '22', '1015')
+                if (is_numeric($q)) {
+                    $sub->orWhere('videos.id', (int)$q);
+                }
+                $cleanDigits = preg_replace('/[^0-9]/', '', $q);
+                if (!empty($cleanDigits) && strlen($cleanDigits) <= 10) {
+                    $sub->orWhere('videos.id', (int)$cleanDigits);
+                }
+
+                // 6. Tags
                 if (!empty($tagVideoIds)) {
                     $sub->orWhereIn('videos.id', $tagVideoIds);
                 }
@@ -435,11 +464,12 @@ class VideoController extends Controller
 
         // Ensure only approved videos appear in public index unless explicitly querying review_status
         if (!$request->filled('review_status')) {
-            $query->where(function($q) {
-                $q->where('videos.review_status', 'approved')->orWhereNull('videos.review_status');
+            $query->where(function($sq) {
+                $sq->where('videos.review_status', 'approved')->orWhereNull('videos.review_status');
             });
         }
 
+        // Both long and short videos are included by default! (Unless user filters by type)
         if ($request->filled('type')) {
             $query->where('videos.type', $request->query('type'));
         }

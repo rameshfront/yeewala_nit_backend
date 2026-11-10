@@ -23,6 +23,8 @@ use App\Http\Controllers\Api\V1\Admin\AdminCategoryController;
 use App\Http\Controllers\Api\V1\Admin\AdminTagController;
 use App\Http\Controllers\Api\V1\Admin\AdminAnalyticsController;
 use App\Http\Controllers\Api\V1\Admin\AdminMonetizationController;
+use App\Http\Controllers\Api\V1\Cms\CmsPageController;
+use App\Http\Controllers\Api\V1\Cms\MenuController;
 use App\Http\Controllers\Api\V1\Location\LocationController;
 use Illuminate\Support\Facades\Route;
 
@@ -139,6 +141,19 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::get('/admin/tags/{id}', [AdminTagController::class, 'show']);
         Route::match(['put', 'patch'], '/admin/tags/{id}', [AdminTagController::class, 'update']);
         Route::delete('/admin/tags/{id}', [AdminTagController::class, 'destroy']);
+
+        // Admin CMS Pages
+        Route::get('/admin/pages', [CmsPageController::class, 'adminIndex']);
+        Route::get('/admin/pages/{id}', [CmsPageController::class, 'adminShow']);
+        Route::post('/admin/pages', [CmsPageController::class, 'store']);
+        Route::match(['put', 'patch'], '/admin/pages/{id}', [CmsPageController::class, 'update']);
+        Route::delete('/admin/pages/{id}', [CmsPageController::class, 'destroy']);
+
+        // Admin Menus
+        Route::get('/admin/menus', [MenuController::class, 'adminIndex']);
+        Route::post('/admin/menus', [MenuController::class, 'store']);
+        Route::match(['put', 'patch'], '/admin/menus/{id}', [MenuController::class, 'update']);
+        Route::delete('/admin/menus/{id}', [MenuController::class, 'destroy']);
     });
 
 
@@ -171,6 +186,11 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     Route::get('/feed/recommended', [VideoController::class, 'recommendedFeed']);
     Route::get('/creators/{id}', [CreatorController::class, 'show']);
     Route::get('/creators/{id}/videos', [CreatorController::class, 'getCreatorVideos']);
+
+    // CMS Pages & Menus (public)
+    Route::get('/pages', [CmsPageController::class, 'index']);
+    Route::get('/pages/{slug}', [CmsPageController::class, 'show']);
+    Route::get('/menus', [MenuController::class, 'index']);
 
     // Search Routes (public)
     Route::get('/search/videos', [VideoController::class, 'searchVideos']);

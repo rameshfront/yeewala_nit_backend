@@ -110,7 +110,11 @@ class WalletController extends Controller
                 ->toArray();
         }
 
-        $mapped = $transactions->map(function ($t) use ($videoTitlesMap) {
+        $userRecharges = DB::table('recharge_requests')
+            ->where('user_id', $user->id)
+            ->get();
+
+        $mapped = $transactions->map(function ($t) use ($videoTitlesMap, $userRecharges) {
             $amountMinor = (int)$t->amount_minor_units;
             $description = $t->description ?? '';
             $category = $t->category ?? 'purchase';
@@ -131,6 +135,15 @@ class WalletController extends Controller
                     $description = 'Wallet recharge (Ref: ' . trim($refMatch[1]) . ')';
                 } else {
                     $description = 'Wallet recharge';
+                }
+            }
+
+            if ($category === 'topup' && !empty($userRecharges)) {
+                foreach ($userRecharges as $ur) {
+                    if ($ur->transaction_reference && str_contains($description, (string)$ur->transaction_reference)) {
+                        $amountMinor = (int)round(((float)$ur->requested_amount) * 100);
+                        break;
+                    }
                 }
             }
 
