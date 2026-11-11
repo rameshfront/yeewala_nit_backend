@@ -336,6 +336,86 @@ class AdminUserController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, $id)
+    {
+        $currentAdmin = $request->user();
+        if ($currentAdmin && (int)$currentAdmin->id === (int)$id) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'FORBIDDEN', 'message' => 'You cannot delete your own admin account.']],
+            ], 400);
+        }
+
+        $user = DB::table('users')->where('id', $id)->first();
+        if (!$user) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'User not found']],
+            ], 404);
+        }
+
+        $reason = $request->input('reason') ?: 'Deleted by administrator';
+
+        // Audit log BEFORE deleting so actor and subject details are recorded
+        if (Schema::hasTable('audit_logs')) {
+            DB::table('audit_logs')->insert([
+                'actor_user_id' => $currentAdmin?->id,
+                'action' => 'user_deleted',
+                'subject_type' => 'user',
+                'subject_id' => $id,
+                'before_state' => json_encode([
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone ?? null,
+                    'status' => $user->status ?? 'active',
+                ]),
+                'after_state' => json_encode([
+                    'deleted' => true,
+                    'reason' => $reason,
+                ]),
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        // Clean up user tokens & sessions
+        if (Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('user_id', $id)->delete();
+        }
+        if (Schema::hasTable('personal_access_tokens')) {
+            DB::table('personal_access_tokens')
+                ->where('tokenable_type', \App\Models\User::class)
+                ->where('tokenable_id', $id)
+                ->delete();
+        }
+        if (Schema::hasTable('password_reset_tokens')) {
+            DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+        }
+        if (Schema::hasTable('model_has_roles')) {
+            DB::table('model_has_roles')
+                ->where('model_type', \App\Models\User::class)
+                ->where('model_id', $id)
+                ->delete();
+        }
+
+        // Delete user (cascades or set null on foreign keys)
+        DB::table('users')->where('id', $id)->delete();
+
+        return response()->json([
+            'data' => [
+                'id' => (int)$id,
+                'deleted' => true,
+                'message' => "User '{$user->name}' was deleted successfully.",
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
     public function sessions($id)
     {
         $sessions = [];

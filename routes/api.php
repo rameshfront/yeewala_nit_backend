@@ -65,6 +65,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         // Admin Users
         Route::get('/admin/users', [AdminUserController::class, 'index']);
         Route::get('/admin/users/{id}', [AdminUserController::class, 'show']);
+        Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
         Route::patch('/admin/users/{id}/suspend', [AdminUserController::class, 'suspend']);
         Route::patch('/admin/users/{id}/ban', [AdminUserController::class, 'ban']);
         Route::patch('/admin/users/{id}/reactivate', [AdminUserController::class, 'reactivate']);
