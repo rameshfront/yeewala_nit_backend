@@ -88,6 +88,11 @@ class AuthController extends Controller
             $request->session()->regenerate();
         }
 
+        $user->update([
+            'last_login_at' => now(),
+            'last_login_ip' => $request->ip(),
+        ]);
+
         return response()->json([
             'data' => $user->formatForFrontend(),
             'meta' => null,
@@ -138,6 +143,11 @@ class AuthController extends Controller
         if ($request->hasSession()) {
             $request->session()->regenerate();
         }
+
+        $user->update([
+            'last_login_at' => now(),
+            'last_login_ip' => $request->ip(),
+        ]);
 
         return response()->json([
             'data' => $user->formatForFrontend(),
@@ -203,6 +213,13 @@ class AuthController extends Controller
 
         $user->load(['country', 'state']);
 
+        if (empty($user->last_login_ip) || empty($user->last_login_at)) {
+            $user->update([
+                'last_login_at' => $user->last_login_at ?? now(),
+                'last_login_ip' => $user->last_login_ip ?? $request->ip(),
+            ]);
+        }
+
         return response()->json([
             'data' => $user->formatForFrontend(),
             'meta' => null,
@@ -226,6 +243,13 @@ class AuthController extends Controller
         }
 
         $user->load(['country', 'state']);
+
+        if (empty($user->last_login_ip) || empty($user->last_login_at)) {
+            $user->update([
+                'last_login_at' => $user->last_login_at ?? now(),
+                'last_login_ip' => $user->last_login_ip ?? $request->ip(),
+            ]);
+        }
 
         return response()->json([
             'data' => $user->formatForFrontend(),
@@ -275,6 +299,13 @@ class AuthController extends Controller
             ->update(['channel_name' => $user->name, 'updated_at' => now()]);
 
         $user->load(['country', 'state']);
+
+        if (empty($user->last_login_ip) || empty($user->last_login_at)) {
+            $user->update([
+                'last_login_at' => $user->last_login_at ?? now(),
+                'last_login_ip' => $user->last_login_ip ?? $request->ip(),
+            ]);
+        }
 
         return response()->json([
             'data' => $user->formatForFrontend(),
@@ -774,6 +805,69 @@ class AuthController extends Controller
 
         return response()->json([
             'data' => ['reset' => true, 'message' => 'Admin password reset successfully. You can now sign in to the Admin Portal.'],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    public function listSessions(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'data' => [],
+                'meta' => null,
+                'errors' => null,
+            ]);
+        }
+
+        $currentSessionId = $request->hasSession() ? $request->session()->getId() : null;
+
+        $dbSessions = DB::table('sessions')
+            ->where('user_id', $user->id)
+            ->orderBy('last_activity', 'desc')
+            ->get();
+
+        $sessions = [];
+        if ($dbSessions->isNotEmpty()) {
+            foreach ($dbSessions as $s) {
+                $sessions[] = [
+                    'id' => (string)$s->id,
+                    'ip_address' => $s->ip_address,
+                    'user_agent' => $s->user_agent,
+                    'last_active_at' => Carbon::createFromTimestamp($s->last_activity)->toISOString(),
+                    'is_current_device' => $currentSessionId && $s->id === $currentSessionId,
+                ];
+            }
+        } else {
+            $sessions[] = [
+                'id' => $currentSessionId ?? 'current',
+                'ip_address' => $user->last_login_ip ?? $request->ip(),
+                'user_agent' => $request->userAgent() ?? 'Current Web Browser',
+                'last_active_at' => ($user->last_login_at ?? now())->toISOString(),
+                'is_current_device' => true,
+            ];
+        }
+
+        return response()->json([
+            'data' => $sessions,
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    public function revokeSession(Request $request, $id)
+    {
+        $user = $request->user();
+        if ($user && $id !== 'current') {
+            DB::table('sessions')
+                ->where('id', $id)
+                ->where('user_id', $user->id)
+                ->delete();
+        }
+
+        return response()->json([
+            'data' => true,
             'meta' => null,
             'errors' => null,
         ]);

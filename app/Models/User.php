@@ -23,6 +23,8 @@ class User extends Authenticatable
         'avatar_path',
         'two_factor_enabled',
         'password',
+        'last_login_at',
+        'last_login_ip',
     ];
 
     protected $hidden = [
@@ -39,6 +41,7 @@ class User extends Authenticatable
             'phone_verified_at' => 'datetime',
             'two_factor_enabled' => 'boolean',
             'password' => 'hashed',
+            'last_login_at' => 'datetime',
         ];
     }
 
@@ -94,6 +97,8 @@ class User extends Authenticatable
             'two_factor_enabled' => (bool)$this->two_factor_enabled,
             'roles'              => $this->getRoleNames(),
             'created_at'         => $this->created_at->toISOString(),
+            'last_login_at'      => $this->last_login_at?->toISOString() ?? $this->updated_at?->toISOString(),
+            'last_login_ip'      => $this->last_login_ip,
         ];
     }
 }

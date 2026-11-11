@@ -10,10 +10,40 @@ use Illuminate\Support\Str;
 class CmsPageController extends Controller
 {
     /**
+     * Ensure core 6 platform pages exist.
+     */
+    private function ensureCorePagesExist(): void
+    {
+        $corePages = [
+            ['slug' => 'about', 'title' => 'About Us', 'content' => '<h2>About Yeewala</h2><p>Yeewala is an educational video learning portal built to provide students, software engineers, and technical creators with direct access to high-impact course lectures and bite-sized concept tutorials.</p>'],
+            ['slug' => 'contact', 'title' => 'Contact Details', 'content' => '<h2>Contact Yeewala Support</h2><p>For educational inquiries, support, or partnership details, please contact us at support@yeewala.com or call our educational hotline.</p>'],
+            ['slug' => 'terms', 'title' => 'Terms & Conditions', 'content' => '<h2>Terms and Conditions of Use</h2><p>By accessing Yeewala, students and educators agree to adhere to standard educational guidelines, respectful interaction, and authorized learning content access.</p>'],
+            ['slug' => 'privacy', 'title' => 'Privacy Policy', 'content' => '<h2>Privacy Policy</h2><p>Yeewala respects your privacy. All user profile data, watch history, and learning progress are safeguarded with industry-standard encryption.</p>'],
+            ['slug' => 'disclaimer', 'title' => 'Disclaimer', 'content' => '<h2>Academic Disclaimer</h2><p>All videos, courses, and educational materials provided on Yeewala are intended solely for learning and personal development purposes.</p>'],
+            ['slug' => 'copyrights', 'title' => 'Copyrights', 'content' => '<h2>Copyright & Ownership</h2><p>Yeewala enforces strict intellectual property guidelines. All educational course creators maintain ownership of their content with full academic permission.</p>'],
+        ];
+
+        foreach ($corePages as $core) {
+            $exists = DB::table('cms_pages')->where('slug', $core['slug'])->exists();
+            if (!$exists) {
+                DB::table('cms_pages')->insert([
+                    'slug' => $core['slug'],
+                    'title' => $core['title'],
+                    'content' => $core['content'],
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }
+    }
+
+    /**
      * Public: List all active CMS pages.
      */
     public function index()
     {
+        $this->ensureCorePagesExist();
         $pages = DB::table('cms_pages')
             ->where('is_active', true)
             ->select('id', 'slug', 'title', 'meta_description', 'created_at', 'updated_at')
@@ -57,6 +87,7 @@ class CmsPageController extends Controller
      */
     public function adminIndex()
     {
+        $this->ensureCorePagesExist();
         $pages = DB::table('cms_pages')
             ->orderBy('id', 'asc')
             ->get();

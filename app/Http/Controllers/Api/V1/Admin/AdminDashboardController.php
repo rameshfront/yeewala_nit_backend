@@ -60,6 +60,10 @@ class AdminDashboardController extends Controller
                     'queue_failed' => 0,
                     'queue_oldest_pending_seconds' => null,
                 ],
+                'admin_session' => [
+                    'last_login_at' => $request->user()?->last_login_at?->toISOString() ?? now()->toISOString(),
+                    'last_login_ip' => $request->user()?->last_login_ip ?? $request->ip(),
+                ],
             ],
             'meta' => null,
             'errors' => null,

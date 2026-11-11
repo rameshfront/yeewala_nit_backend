@@ -49,6 +49,10 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
     });
 
     Route::middleware(['auth:sanctum'])->group(function () {
+        // Active Sessions
+        Route::get('/auth/sessions', [AuthController::class, 'listSessions']);
+        Route::delete('/auth/sessions/{id}', [AuthController::class, 'revokeSession']);
+
         // Admin Profile & Identity
         Route::get('/admin/me', [AuthController::class, 'adminMe']);
 
