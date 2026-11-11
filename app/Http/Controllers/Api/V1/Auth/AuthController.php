@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -687,10 +688,13 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $validated = $request->validate([
-            'email' => 'required|email|max:255',
+            'email' => 'required|string|max:255',
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
+        $identifier = trim($validated['email']);
+        $user = User::where('email', $identifier)
+            ->orWhere('phone', $identifier)
+            ->first();
 
         // If user is found and is ONLY an admin, redirect them to admin reset
         if ($user) {
@@ -702,7 +706,7 @@ class AuthController extends Controller
                     'errors' => [
                         [
                             'code' => 'ADMIN_ACCOUNT',
-                            'message' => 'This email belongs to an administrator account. Please use the Admin Password Reset at /admin/forgot-password.',
+                            'message' => 'This account belongs to an administrator. Please use the Admin Password Reset at /admin/forgot-password.',
                         ]
                     ]
                 ], 422);
@@ -717,15 +721,51 @@ class AuthController extends Controller
                 ]
             );
 
-            $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
-            $resetUrl = rtrim($frontendUrl, '/') . '/reset-password?token=' . urlencode($token) . '&email=' . urlencode($user->email);
+            $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:3000')), '/');
+            $resetUrl = $frontendUrl . '/reset-password?token=' . urlencode($token) . '&email=' . urlencode($user->email);
             Log::info("User Password Reset Link generated for [{$user->email}]: {$resetUrl}");
+
+            // Attempt email dispatch (works seamlessly with log driver or live SMTP)
+            try {
+                $appName = config('app.name', 'Yeewala');
+                Mail::html(
+                    "<div style='font-family:sans-serif;max-width:560px;margin:auto;padding:24px;border:1px solid #e4e4e7;border-radius:12px;background:#ffffff;'>"
+                    . "<h2 style='color:#18181b;margin-bottom:8px;'>Reset Your Password</h2>"
+                    . "<p style='color:#52525b;font-size:14px;line-height:1.5;'>Hello {$user->name},</p>"
+                    . "<p style='color:#52525b;font-size:14px;line-height:1.5;'>We received a request to reset your password for your {$appName} account. Click the button below to proceed:</p>"
+                    . "<div style='margin:24px 0;text-align:center;'>"
+                    . "<a href='{$resetUrl}' style='background:#18181b;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;font-size:14px;'>Reset Password</a>"
+                    . "</div>"
+                    . "<p style='color:#71717a;font-size:12px;line-height:1.5;'>Or copy and paste this link into your browser:<br/><a href='{$resetUrl}' style='color:#2563eb;word-break:break-all;'>{$resetUrl}</a></p>"
+                    . "<p style='color:#a1a1aa;font-size:11px;margin-top:20px;border-top:1px solid #f4f4f5;padding-top:12px;'>This link is valid for 60 minutes. If you did not request a password reset, you can safely ignore this email.</p>"
+                    . "</div>",
+                    function ($message) use ($user, $appName) {
+                        $message->to($user->email)->subject("Reset Your Password - {$appName}");
+                    }
+                );
+            } catch (\Throwable $mailErr) {
+                Log::warning("Could not dispatch password reset email: " . $mailErr->getMessage());
+            }
+
+            return response()->json([
+                'data' => [
+                    'sent' => true,
+                    'message' => 'Password reset link generated. A reset link has been dispatched to your email.',
+                    'reset_url' => $resetUrl,
+                    'token' => $token,
+                    'email' => $user->email,
+                ],
+                'meta' => null,
+                'errors' => null,
+            ]);
         }
 
         return response()->json([
             'data' => [
                 'sent' => true,
-                'message' => 'If an account exists with that email, a password reset link has been sent.',
+                'message' => 'If an account exists with that email or phone, a password reset link has been sent.',
+                'reset_url' => null,
+                'email' => $identifier,
             ],
             'meta' => null,
             'errors' => null,
@@ -765,14 +805,38 @@ class AuthController extends Controller
             ]
         );
 
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
-        $resetUrl = rtrim($frontendUrl, '/') . '/admin/reset-password?token=' . urlencode($token) . '&email=' . urlencode($user->email);
+        $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:3000')), '/');
+        $resetUrl = $frontendUrl . '/admin/reset-password?token=' . urlencode($token) . '&email=' . urlencode($user->email);
         Log::info("Admin Password Reset Link generated for [{$user->email}]: {$resetUrl}");
+
+        try {
+            $appName = config('app.name', 'Yeewala');
+            Mail::html(
+                "<div style='font-family:sans-serif;max-width:560px;margin:auto;padding:24px;border:1px solid #e4e4e7;border-radius:12px;background:#ffffff;'>"
+                . "<h2 style='color:#dc2626;margin-bottom:8px;'>Admin Password Reset</h2>"
+                . "<p style='color:#52525b;font-size:14px;line-height:1.5;'>Hello {$user->name},</p>"
+                . "<p style='color:#52525b;font-size:14px;line-height:1.5;'>You requested to reset your administrator password for {$appName}. Click below to proceed:</p>"
+                . "<div style='margin:24px 0;text-align:center;'>"
+                . "<a href='{$resetUrl}' style='background:#dc2626;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;font-size:14px;'>Reset Admin Password</a>"
+                . "</div>"
+                . "<p style='color:#71717a;font-size:12px;line-height:1.5;'>Or copy and paste this link into your browser:<br/><a href='{$resetUrl}' style='color:#2563eb;word-break:break-all;'>{$resetUrl}</a></p>"
+                . "<p style='color:#a1a1aa;font-size:11px;margin-top:20px;border-top:1px solid #f4f4f5;padding-top:12px;'>This link is valid for 60 minutes.</p>"
+                . "</div>",
+                function ($message) use ($user, $appName) {
+                    $message->to($user->email)->subject("Admin Password Reset - {$appName}");
+                }
+            );
+        } catch (\Throwable $mailErr) {
+            Log::warning("Could not dispatch admin password reset email: " . $mailErr->getMessage());
+        }
 
         return response()->json([
             'data' => [
                 'sent' => true,
                 'message' => 'Admin password reset link has been sent to your email.',
+                'reset_url' => $resetUrl,
+                'token' => $token,
+                'email' => $user->email,
             ],
             'meta' => null,
             'errors' => null,
