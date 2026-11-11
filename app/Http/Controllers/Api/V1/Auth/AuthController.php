@@ -84,6 +84,45 @@ class AuthController extends Controller
             ], 403);
         }
 
+        // Enforce account suspension or ban
+        if ($user->status === 'banned') {
+            Auth::guard('web')->logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+            $reasonText = $user->status_reason ? " Reason: {$user->status_reason}" : "";
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    [
+                        'code' => 'ACCOUNT_BANNED',
+                        'message' => "This account has been banned by administrators.{$reasonText}",
+                    ]
+                ]
+            ], 403);
+        }
+
+        if ($user->status === 'suspended') {
+            Auth::guard('web')->logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+            $reasonText = $user->status_reason ? " Reason: {$user->status_reason}" : "";
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    [
+                        'code' => 'ACCOUNT_SUSPENDED',
+                        'message' => "This account is temporarily suspended.{$reasonText}",
+                    ]
+                ]
+            ], 403);
+        }
+
         if ($request->hasSession()) {
             $request->session()->regenerate();
         }
@@ -213,6 +252,20 @@ class AuthController extends Controller
 
         $user->load(['country', 'state']);
 
+        if ($user->status === 'banned' || $user->status === 'suspended') {
+            Auth::guard('web')->logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+            }
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'ACCOUNT_INACTIVE', 'message' => "Your account is {$user->status}."]
+                ]
+            ], 403);
+        }
+
         if (empty($user->last_login_ip) || empty($user->last_login_at)) {
             $user->update([
                 'last_login_at' => $user->last_login_at ?? now(),
@@ -243,6 +296,20 @@ class AuthController extends Controller
         }
 
         $user->load(['country', 'state']);
+
+        if ($user->status === 'banned' || $user->status === 'suspended') {
+            Auth::guard('web')->logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+            }
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'ACCOUNT_INACTIVE', 'message' => "Your account is {$user->status}."]
+                ]
+            ], 403);
+        }
 
         if (empty($user->last_login_ip) || empty($user->last_login_at)) {
             $user->update([
@@ -299,6 +366,20 @@ class AuthController extends Controller
             ->update(['channel_name' => $user->name, 'updated_at' => now()]);
 
         $user->load(['country', 'state']);
+
+        if ($user->status === 'banned' || $user->status === 'suspended') {
+            Auth::guard('web')->logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+            }
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    ['code' => 'ACCOUNT_INACTIVE', 'message' => "Your account is {$user->status}."]
+                ]
+            ], 403);
+        }
 
         if (empty($user->last_login_ip) || empty($user->last_login_at)) {
             $user->update([

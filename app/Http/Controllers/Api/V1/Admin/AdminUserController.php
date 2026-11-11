@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class AdminUserController extends Controller
 {
@@ -155,49 +156,181 @@ class AdminUserController extends Controller
 
     public function suspend(Request $request, $id)
     {
-        $reason = $request->input('reason', 'Suspended by administrator');
-        if (Schema::hasColumn('users', 'status')) {
-            DB::table('users')->where('id', $id)->update([
-                'status' => 'suspended',
-                'status_reason' => $reason,
-                'status_changed_at' => now(),
+        $user = DB::table('users')->where('id', $id)->first();
+        if (!$user) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'User not found']],
+            ], 404);
+        }
+
+        $reason = $request->input('reason') ?: 'Suspended by administrator';
+
+        DB::table('users')->where('id', $id)->update([
+            'status' => 'suspended',
+            'status_reason' => $reason,
+            'status_changed_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Revoke active sessions and tokens
+        if (Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('user_id', $id)->delete();
+        }
+        if (Schema::hasTable('personal_access_tokens')) {
+            DB::table('personal_access_tokens')->where('tokenable_id', $id)->delete();
+        }
+
+        // Audit log
+        if (Schema::hasTable('audit_logs')) {
+            DB::table('audit_logs')->insert([
+                'actor_user_id' => $request->user()?->id,
+                'action' => 'user_suspended',
+                'subject_type' => 'user',
+                'subject_id' => $id,
+                'before_state' => json_encode(['status' => $user->status ?? 'active']),
+                'after_state' => json_encode(['status' => 'suspended', 'reason' => $reason, 'user_email' => $user->email]),
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
                 'updated_at' => now(),
             ]);
         }
+
         return $this->show($id);
     }
 
     public function ban(Request $request, $id)
     {
-        $reason = $request->input('reason', 'Banned by administrator');
-        if (Schema::hasColumn('users', 'status')) {
-            DB::table('users')->where('id', $id)->update([
-                'status' => 'banned',
-                'status_reason' => $reason,
-                'status_changed_at' => now(),
+        $user = DB::table('users')->where('id', $id)->first();
+        if (!$user) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'User not found']],
+            ], 404);
+        }
+
+        $reason = $request->input('reason') ?: 'Banned by administrator';
+
+        DB::table('users')->where('id', $id)->update([
+            'status' => 'banned',
+            'status_reason' => $reason,
+            'status_changed_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Revoke active sessions and tokens
+        if (Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('user_id', $id)->delete();
+        }
+        if (Schema::hasTable('personal_access_tokens')) {
+            DB::table('personal_access_tokens')->where('tokenable_id', $id)->delete();
+        }
+
+        // Audit log
+        if (Schema::hasTable('audit_logs')) {
+            DB::table('audit_logs')->insert([
+                'actor_user_id' => $request->user()?->id,
+                'action' => 'user_banned',
+                'subject_type' => 'user',
+                'subject_id' => $id,
+                'before_state' => json_encode(['status' => $user->status ?? 'active']),
+                'after_state' => json_encode(['status' => 'banned', 'reason' => $reason, 'user_email' => $user->email]),
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
                 'updated_at' => now(),
             ]);
         }
+
         return $this->show($id);
     }
 
-    public function reactivate($id)
+    public function reactivate(Request $request, $id)
     {
-        if (Schema::hasColumn('users', 'status')) {
-            DB::table('users')->where('id', $id)->update([
-                'status' => 'active',
-                'status_reason' => null,
-                'status_changed_at' => now(),
+        $user = DB::table('users')->where('id', $id)->first();
+        if (!$user) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'User not found']],
+            ], 404);
+        }
+
+        DB::table('users')->where('id', $id)->update([
+            'status' => 'active',
+            'status_reason' => null,
+            'status_changed_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Audit log
+        if (Schema::hasTable('audit_logs')) {
+            DB::table('audit_logs')->insert([
+                'actor_user_id' => $request->user()?->id,
+                'action' => 'user_reactivated',
+                'subject_type' => 'user',
+                'subject_id' => $id,
+                'before_state' => json_encode(['status' => $user->status ?? 'unknown']),
+                'after_state' => json_encode(['status' => 'active', 'user_email' => $user->email]),
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
                 'updated_at' => now(),
             ]);
         }
+
         return $this->show($id);
     }
 
-    public function resetPassword($id)
+    public function resetPassword(Request $request, $id)
     {
+        $user = DB::table('users')->where('id', $id)->first();
+        if (!$user) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'User not found']],
+            ], 404);
+        }
+
+        $rawToken = Str::random(60);
+
+        if (Schema::hasTable('password_reset_tokens')) {
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email' => $user->email],
+                [
+                    'token' => Hash::make($rawToken),
+                    'created_at' => now(),
+                ]
+            );
+        }
+
+        $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:3000')), '/');
+        $resetUrl = $frontendUrl . '/reset-password?token=' . $rawToken . '&email=' . urlencode($user->email);
+
+        if (Schema::hasTable('audit_logs')) {
+            DB::table('audit_logs')->insert([
+                'actor_user_id' => $request->user()?->id,
+                'action' => 'password_reset_generated',
+                'subject_type' => 'user',
+                'subject_id' => $id,
+                'before_state' => null,
+                'after_state' => json_encode(['user_email' => $user->email, 'reset_url' => $resetUrl]),
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         return response()->json([
-            'data' => ['sent' => true],
+            'data' => [
+                'sent' => true,
+                'reset_url' => $resetUrl,
+                'token' => $rawToken,
+                'email' => $user->email,
+                'user_name' => $user->name,
+                'message' => 'Password reset link generated successfully.',
+            ],
             'meta' => null,
             'errors' => null,
         ]);
@@ -205,16 +338,42 @@ class AdminUserController extends Controller
 
     public function sessions($id)
     {
+        $sessions = [];
+        if (Schema::hasTable('sessions')) {
+            $dbSessions = DB::table('sessions')
+                ->where('user_id', $id)
+                ->orderBy('last_activity', 'desc')
+                ->get();
+
+            foreach ($dbSessions as $s) {
+                $sessions[] = [
+                    'id' => (string)$s->id,
+                    'ip_address' => $s->ip_address ?: '127.0.0.1',
+                    'user_agent' => $s->user_agent ?: 'Web Browser',
+                    'last_active_at' => date('c', $s->last_activity),
+                    'is_current_device' => false,
+                ];
+            }
+        }
+
         return response()->json([
-            'data' => [
-                [
-                    'id' => 'sess_' . $id,
-                    'ip_address' => request()->ip() ?? '127.0.0.1',
-                    'user_agent' => request()->userAgent() ?? 'Mozilla/5.0 Browser',
-                    'last_active_at' => now()->toIso8601String(),
-                    'is_current_device' => true,
-                ]
-            ],
+            'data' => $sessions,
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
+    public function forceLogout($id)
+    {
+        if (Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('user_id', $id)->delete();
+        }
+        if (Schema::hasTable('personal_access_tokens')) {
+            DB::table('personal_access_tokens')->where('tokenable_id', $id)->delete();
+        }
+
+        return response()->json([
+            'data' => true,
             'meta' => null,
             'errors' => null,
         ]);

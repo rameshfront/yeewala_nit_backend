@@ -70,7 +70,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::patch('/admin/users/{id}/reactivate', [AdminUserController::class, 'reactivate']);
         Route::post('/admin/users/{id}/reset-password', [AdminUserController::class, 'resetPassword']);
         Route::get('/admin/users/{id}/sessions', [AdminUserController::class, 'sessions']);
-        Route::delete('/admin/users/{id}/sessions', [AdminUserController::class, 'resetPassword']);
+        Route::delete('/admin/users/{id}/sessions', [AdminUserController::class, 'forceLogout']);
         Route::get('/admin/users/{id}/wallet', [AdminUserController::class, 'wallet']);
         Route::get('/admin/users/{id}/wallet/transactions', [AdminUserController::class, 'walletTransactions']);
         Route::post('/admin/users/{id}/wallet/adjust', [AdminUserController::class, 'adjustWallet']);
