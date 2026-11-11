@@ -688,13 +688,10 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $validated = $request->validate([
-            'email' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
         ]);
 
-        $identifier = trim($validated['email']);
-        $user = User::where('email', $identifier)
-            ->orWhere('phone', $identifier)
-            ->first();
+        $user = User::where('email', $validated['email'])->first();
 
         // If user is found and is ONLY an admin, redirect them to admin reset
         if ($user) {
@@ -706,7 +703,7 @@ class AuthController extends Controller
                     'errors' => [
                         [
                             'code' => 'ADMIN_ACCOUNT',
-                            'message' => 'This account belongs to an administrator. Please use the Admin Password Reset at /admin/forgot-password.',
+                            'message' => 'This email belongs to an administrator account. Please use the Admin Password Reset at /admin/forgot-password.',
                         ]
                     ]
                 ], 422);
@@ -750,9 +747,7 @@ class AuthController extends Controller
             return response()->json([
                 'data' => [
                     'sent' => true,
-                    'message' => 'Password reset link generated. A reset link has been dispatched to your email.',
-                    'reset_url' => $resetUrl,
-                    'token' => $token,
+                    'message' => 'A password reset link has been sent to your email address.',
                     'email' => $user->email,
                 ],
                 'meta' => null,
@@ -763,9 +758,8 @@ class AuthController extends Controller
         return response()->json([
             'data' => [
                 'sent' => true,
-                'message' => 'If an account exists with that email or phone, a password reset link has been sent.',
-                'reset_url' => null,
-                'email' => $identifier,
+                'message' => 'If an account exists with that email, a password reset link has been sent.',
+                'email' => $validated['email'],
             ],
             'meta' => null,
             'errors' => null,
@@ -834,8 +828,6 @@ class AuthController extends Controller
             'data' => [
                 'sent' => true,
                 'message' => 'Admin password reset link has been sent to your email.',
-                'reset_url' => $resetUrl,
-                'token' => $token,
                 'email' => $user->email,
             ],
             'meta' => null,
