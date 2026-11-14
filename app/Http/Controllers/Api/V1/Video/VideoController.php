@@ -585,10 +585,13 @@ class VideoController extends Controller
         }
 
         $request->validate([
-            'title'       => 'sometimes|string|max:255',
-            'description' => 'nullable|string',
-            'category_id' => 'nullable|integer',
-            'tags'        => 'nullable|array',
+            'title'              => 'sometimes|string|max:255',
+            'description'        => 'nullable|string',
+            'category_id'        => 'nullable|integer',
+            'tags'               => 'nullable|array',
+            'price_rupees'       => 'nullable|numeric|min:0',
+            'price_minor_units'  => 'nullable|integer|min:0',
+            'visibility'         => 'nullable|string',
         ]);
 
         $updates = [];
@@ -609,6 +612,21 @@ class VideoController extends Controller
             } else {
                 $updates['category_id'] = null;
             }
+        }
+        if ($request->has('price_minor_units')) {
+            $updates['price_minor_units'] = $request->input('price_minor_units');
+            if ($updates['price_minor_units'] !== null && (int)$updates['price_minor_units'] > 0) {
+                $updates['visibility'] = 'paid';
+            }
+        } elseif ($request->has('price_rupees')) {
+            $rupees = $request->input('price_rupees');
+            $updates['price_minor_units'] = $rupees !== null ? (int)round((float)$rupees * 100) : null;
+            if ($updates['price_minor_units'] !== null && (int)$updates['price_minor_units'] > 0) {
+                $updates['visibility'] = 'paid';
+            }
+        }
+        if ($request->has('visibility')) {
+            $updates['visibility'] = $request->input('visibility');
         }
         $updates['updated_at'] = now();
 

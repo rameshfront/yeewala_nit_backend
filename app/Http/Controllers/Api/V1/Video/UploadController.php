@@ -333,6 +333,7 @@ class UploadController extends Controller
             $videoUpdates = [
                 'status'       => 'ready',
                 'source_path'  => $sourceUrl,
+                'visibility'   => 'paid',
                 'review_status'=> 'pending_review',
                 'updated_at'   => now(),
             ];

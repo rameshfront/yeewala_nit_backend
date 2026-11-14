@@ -91,6 +91,8 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::patch('/admin/videos/{id}/approve', [AdminVideoController::class, 'approve']);
         Route::patch('/admin/videos/{id}/reject', [AdminVideoController::class, 'reject']);
         Route::patch('/admin/videos/{id}/request-changes', [AdminVideoController::class, 'requestChanges']);
+        Route::patch('/admin/videos/{id}/pending', [AdminVideoController::class, 'setPending']);
+        Route::patch('/admin/videos/{id}/review-status', [AdminVideoController::class, 'updateReviewStatus']);
         Route::patch('/admin/videos/{id}/publish', [AdminVideoController::class, 'publish']);
         Route::patch('/admin/videos/{id}/feature', [AdminVideoController::class, 'feature']);
         Route::patch('/admin/videos/{id}/unfeature', [AdminVideoController::class, 'unfeature']);

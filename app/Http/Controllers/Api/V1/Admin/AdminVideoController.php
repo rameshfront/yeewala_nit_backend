@@ -253,18 +253,71 @@ class AdminVideoController extends Controller
         return $this->show($id);
     }
 
-    public function publish(Request $request, $id)
+    public function setPending($id)
     {
-        $visibility = $request->input('visibility', 'public');
+        DB::table('videos')->where('id', $id)->update([
+            'review_status' => 'pending_review',
+            'review_notes' => null,
+            'updated_at' => now(),
+        ]);
+        return $this->show($id);
+    }
+
+    public function updateReviewStatus(Request $request, $id)
+    {
+        $status = $request->input('review_status', 'pending_review');
+        $notes = $request->input('review_notes');
+        $priceRupees = $request->input('price_rupees');
         $priceMinor = $request->input('price_minor_units');
 
-        DB::table('videos')->where('id', $id)->update([
+        $updates = [
+            'review_status' => $status,
+            'updated_at' => now(),
+        ];
+
+        if ($status === 'approved') {
+            $updates['status'] = 'published';
+            $updates['reviewed_at'] = now();
+        } elseif ($status === 'pending_review') {
+            $updates['reviewed_at'] = null;
+        } elseif ($status === 'rejected' || $status === 'changes_requested') {
+            $updates['reviewed_at'] = now();
+            if ($notes !== null) {
+                $updates['review_notes'] = $notes;
+            }
+        }
+
+        if ($priceRupees !== null && $priceRupees !== '') {
+            $updates['price_minor_units'] = (int)round((float)$priceRupees * 100);
+            $updates['visibility'] = 'paid';
+        } elseif ($priceMinor !== null) {
+            $updates['price_minor_units'] = (int)$priceMinor;
+            $updates['visibility'] = 'paid';
+        }
+
+        DB::table('videos')->where('id', $id)->update($updates);
+        return $this->show($id);
+    }
+
+    public function publish(Request $request, $id)
+    {
+        $visibility = $request->input('visibility', 'paid');
+        $priceMinor = $request->input('price_minor_units');
+        if ($request->has('price_rupees') && $request->input('price_rupees') !== null) {
+            $priceMinor = (int)round((float)$request->input('price_rupees') * 100);
+        }
+
+        $updates = [
             'visibility' => $visibility,
-            'price_minor_units' => $priceMinor,
             'status' => 'published',
             'published_at' => now(),
             'updated_at' => now(),
-        ]);
+        ];
+        if ($priceMinor !== null) {
+            $updates['price_minor_units'] = $priceMinor;
+        }
+
+        DB::table('videos')->where('id', $id)->update($updates);
         return $this->show($id);
     }
 
