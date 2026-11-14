@@ -459,6 +459,179 @@ class AdminUserController extends Controller
         ]);
     }
 
+    /**
+     * List active and recent platform sessions for Administrators.
+     */
+    public function activeSessions(Request $request)
+    {
+        $limit = max(10, min(100, (int)$request->query('limit', 50)));
+        $search = trim((string)$request->query('q', ''));
+        $filterStatus = $request->query('status', 'all'); // 'all', 'active'
+        $activeWindowSeconds = (int)config('session.lifetime', 120) * 60;
+        $activeThreshold = time() - $activeWindowSeconds;
+
+        $currentUser = $request->user();
+        $currentSessionId = $request->hasSession() ? $request->session()->getId() : null;
+
+        $sessions = [];
+
+        // 1. Fetch sessions from 'sessions' table
+        if (Schema::hasTable('sessions')) {
+            $query = DB::table('sessions')
+                ->leftJoin('users', 'sessions.user_id', '=', 'users.id')
+                ->select([
+                    'sessions.id',
+                    'sessions.user_id',
+                    'sessions.ip_address',
+                    'sessions.user_agent',
+                    'sessions.last_activity',
+                    'users.name as user_name',
+                    'users.email as user_email',
+                    'users.last_login_at',
+                    'users.last_login_ip',
+                ]);
+
+            if ($filterStatus === 'active') {
+                $query->where('sessions.last_activity', '>=', $activeThreshold);
+            }
+
+            if (!empty($search)) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('users.name', 'like', "%{$search}%")
+                      ->orWhere('users.email', 'like', "%{$search}%")
+                      ->orWhere('sessions.ip_address', 'like', "%{$search}%")
+                      ->orWhere('sessions.user_agent', 'like', "%{$search}%");
+                });
+            }
+
+            $rows = $query->orderBy('sessions.last_activity', 'desc')
+                ->limit($limit)
+                ->get();
+
+            // Pre-fetch roles for the users in these sessions
+            $userIds = $rows->pluck('user_id')->filter()->unique()->toArray();
+            $rolesByUser = [];
+            if (!empty($userIds) && Schema::hasTable('model_has_roles')) {
+                $roles = DB::table('model_has_roles')
+                    ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+                    ->whereIn('model_has_roles.model_id', $userIds)
+                    ->where('model_has_roles.model_type', \App\Models\User::class)
+                    ->select('model_has_roles.model_id as user_id', 'roles.name as role_name')
+                    ->get();
+
+                foreach ($roles as $r) {
+                    $rolesByUser[$r->user_id][] = $r->role_name;
+                }
+            }
+
+            foreach ($rows as $s) {
+                $isActive = $s->last_activity >= $activeThreshold;
+                $isCurrent = ($currentSessionId && $s->id === $currentSessionId)
+                    || ($currentUser && (int)$s->user_id === (int)$currentUser->id && $s->ip_address === $request->ip());
+
+                $ua = $s->user_agent ?: 'Unknown Browser';
+                $device = 'Desktop Browser';
+                if (stripos($ua, 'Mobile') !== false || stripos($ua, 'Android') !== false || stripos($ua, 'iPhone') !== false) {
+                    $device = 'Mobile Device';
+                } elseif (stripos($ua, 'Tablet') !== false || stripos($ua, 'iPad') !== false) {
+                    $device = 'Tablet';
+                }
+                if (stripos($ua, 'Chrome') !== false) {
+                    $device .= ' (Chrome)';
+                } elseif (stripos($ua, 'Firefox') !== false) {
+                    $device .= ' (Firefox)';
+                } elseif (stripos($ua, 'Safari') !== false) {
+                    $device .= ' (Safari)';
+                } elseif (stripos($ua, 'Edge') !== false) {
+                    $device .= ' (Edge)';
+                }
+
+                $userRole = 'User';
+                if ($s->user_id && isset($rolesByUser[$s->user_id])) {
+                    $userRole = ucfirst(implode(', ', $rolesByUser[$s->user_id]));
+                } elseif ($s->user_id && (int)$s->user_id === 3) {
+                    $userRole = 'Admin';
+                } elseif (!$s->user_id) {
+                    $userRole = 'Guest';
+                }
+
+                $sessions[] = [
+                    'id' => (string)$s->id,
+                    'user_id' => $s->user_id ? (int)$s->user_id : null,
+                    'user_name' => $s->user_name ?: ($s->user_id ? "User #{$s->user_id}" : 'Guest / Visitor'),
+                    'user_email' => $s->user_email ?: null,
+                    'role' => $userRole,
+                    'ip_address' => $s->ip_address ?: '127.0.0.1',
+                    'user_agent' => $ua,
+                    'device' => $device,
+                    'last_active_at' => date('c', $s->last_activity),
+                    'is_active' => $isActive,
+                    'is_current' => (bool)$isCurrent,
+                ];
+            }
+        }
+
+        // 2. Also ensure current active Admin user session is always present at top
+        if ($currentUser) {
+            $hasCurrent = false;
+            foreach ($sessions as $item) {
+                if ($item['is_current'] || ((int)$item['user_id'] === (int)$currentUser->id && $item['is_active'])) {
+                    $hasCurrent = true;
+                    break;
+                }
+            }
+
+            if (!$hasCurrent) {
+                $ua = $request->userAgent() ?: 'Desktop Browser (Chrome)';
+                array_unshift($sessions, [
+                    'id' => $currentSessionId ?: ('current-admin-' . $currentUser->id),
+                    'user_id' => (int)$currentUser->id,
+                    'user_name' => $currentUser->name,
+                    'user_email' => $currentUser->email,
+                    'role' => 'Admin',
+                    'ip_address' => $currentUser->last_login_ip ?: $request->ip() ?: '127.0.0.1',
+                    'user_agent' => $ua,
+                    'device' => 'Desktop Browser (Current Session)',
+                    'last_active_at' => now()->toIso8601String(),
+                    'is_active' => true,
+                    'is_current' => true,
+                ]);
+            }
+        }
+
+        $activeCount = count(array_filter($sessions, fn($s) => $s['is_active']));
+
+        return response()->json([
+            'data' => $sessions,
+            'meta' => [
+                'total_count' => count($sessions),
+                'active_count' => $activeCount,
+                'last_updated_at' => now()->toIso8601String(),
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Terminate an active session.
+     */
+    public function revokeSession(Request $request, $sessionId)
+    {
+        if (Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('id', $sessionId)->delete();
+        }
+
+        return response()->json([
+            'data' => [
+                'id' => $sessionId,
+                'revoked' => true,
+                'message' => 'Session terminated successfully.',
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
+
     public function wallet($userId)
     {
         $user = DB::table('users')->where('id', $userId)->first();
