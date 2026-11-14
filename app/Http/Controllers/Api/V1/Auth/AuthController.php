@@ -37,6 +37,7 @@ class AuthController extends Controller
         ]);
 
         Auth::login($user);
+        $this->syncUserSession($request, $user);
 
         return response()->json([
             'data' => $user->formatForFrontend(),
@@ -133,6 +134,8 @@ class AuthController extends Controller
             'last_login_ip' => $request->ip(),
         ]);
 
+        $this->syncUserSession($request, $user);
+
         return response()->json([
             'data' => $user->formatForFrontend(),
             'meta' => null,
@@ -188,6 +191,8 @@ class AuthController extends Controller
             'last_login_at' => now(),
             'last_login_ip' => $request->ip(),
         ]);
+
+        $this->syncUserSession($request, $user);
 
         return response()->json([
             'data' => $user->formatForFrontend(),
@@ -274,6 +279,8 @@ class AuthController extends Controller
             ]);
         }
 
+        $this->syncUserSession($request, $user);
+
         return response()->json([
             'data' => $user->formatForFrontend(),
             'meta' => null,
@@ -318,6 +325,8 @@ class AuthController extends Controller
                 'last_login_ip' => $user->last_login_ip ?? $request->ip(),
             ]);
         }
+
+        $this->syncUserSession($request, $user);
 
         return response()->json([
             'data' => $user->formatForFrontend(),
@@ -389,6 +398,8 @@ class AuthController extends Controller
             ]);
         }
 
+        $this->syncUserSession($request, $user);
+
         return response()->json([
             'data' => $user->formatForFrontend(),
             'meta' => null,
@@ -417,6 +428,13 @@ class AuthController extends Controller
             $path = $request->file('avatar')->store('avatars', 'public');
             $user->avatar_path = '/storage/' . $path;
             $user->save();
+
+            // Ensure file is mirrored to public/storage if not symlinked
+            $targetDir = public_path('storage/' . dirname($path));
+            if (!is_dir($targetDir)) {
+                @mkdir($targetDir, 0755, true);
+            }
+            @copy(storage_path('app/public/' . $path), public_path('storage/' . $path));
 
             \Illuminate\Support\Facades\DB::table('creator_profiles')
                 ->where('user_id', $user->id)
@@ -945,6 +963,29 @@ class AuthController extends Controller
             'meta' => null,
             'errors' => null,
         ]);
+    }
+
+    private function syncUserSession(Request $request, $user): void
+    {
+        if (!$user || !Schema::hasTable('sessions')) {
+            return;
+        }
+
+        try {
+            $sessionId = $request->hasSession() ? $request->session()->getId() : ('sess-user-' . $user->id);
+            DB::table('sessions')->updateOrInsert(
+                ['id' => $sessionId],
+                [
+                    'user_id' => $user->id,
+                    'ip_address' => $request->ip() ?: '127.0.0.1',
+                    'user_agent' => $request->userAgent() ?: 'Desktop Browser (Chrome)',
+                    'payload' => '',
+                    'last_activity' => time(),
+                ]
+            );
+        } catch (\Throwable $e) {
+            // Silently ignore session sync issues
+        }
     }
 }
 

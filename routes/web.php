@@ -52,3 +52,16 @@ Route::get('/clear', function () {
         'results' => $results,
     ]);
 });
+
+
+Route::get('/storage/{path}', function ($path) {
+    $storagePath = storage_path('app/public/' . $path);
+    if (file_exists($storagePath)) {
+        return response()->file($storagePath);
+    }
+    $publicStoragePath = public_path('storage/' . $path);
+    if (file_exists($publicStoragePath)) {
+        return response()->file($publicStoragePath);
+    }
+    abort(404);
+})->where('path', '.*');
