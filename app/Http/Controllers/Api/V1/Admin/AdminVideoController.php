@@ -11,9 +11,47 @@ class AdminVideoController extends Controller
 {
     private function formatAdminVideo($v)
     {
-        $avatarUrl = isset($v->avatar_path) && $v->avatar_path
-            ? (str_starts_with($v->avatar_path, 'http') ? $v->avatar_path : asset('storage/' . $v->avatar_path))
-            : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop';
+        $avatarPath = $v->creator_avatar_path ?? $v->user_avatar_path ?? $v->avatar_path ?? null;
+        $avatarUrl = null;
+        if ($avatarPath) {
+            if (str_starts_with($avatarPath, 'http')) {
+                $avatarUrl = $avatarPath;
+            } else {
+                $cleanPath = ltrim($avatarPath, '/');
+                if (str_starts_with($cleanPath, 'storage/')) {
+                    $avatarUrl = asset($cleanPath);
+                } else {
+                    $avatarUrl = asset('storage/' . $cleanPath);
+                }
+            }
+        }
+
+        $thumbnailUrl = null;
+        $thumbPath = $v->thumbnail_path ?? null;
+        if (empty($thumbPath) && file_exists(public_path("storage/thumbnails/video_{$v->id}.jpg"))) {
+            $thumbPath = "/storage/thumbnails/video_{$v->id}.jpg";
+        }
+        if (!empty($thumbPath)) {
+            if (str_starts_with($thumbPath, 'http')) {
+                $thumbnailUrl = $thumbPath;
+            } else {
+                $cleanThumb = ltrim($thumbPath, '/');
+                if (str_starts_with($cleanThumb, 'storage/')) {
+                    $thumbnailUrl = asset($cleanThumb);
+                } else {
+                    $thumbnailUrl = asset('storage/' . $cleanThumb);
+                }
+            }
+        }
+
+        $category = null;
+        if (!empty($v->category_name)) {
+            $category = [
+                'id' => (int)($v->category_id ?? 0),
+                'name' => $v->category_name,
+                'slug' => $v->category_slug ?? '',
+            ];
+        }
 
         return [
             'id' => (int)$v->id,
@@ -21,8 +59,10 @@ class AdminVideoController extends Controller
             'creator' => [
                 'id' => (int)$v->creator_profile_id,
                 'user_id' => (int)($v->user_id ?? 1),
-                'channel_name' => $v->channel_name ?? 'Ramesh K Channel',
-                'channel_slug' => $v->channel_slug ?? 'ramesh-k',
+                'user_name' => $v->user_name ?? null,
+                'user_email' => $v->user_email ?? null,
+                'channel_name' => $v->channel_name ?? $v->user_name ?? 'Creator',
+                'channel_slug' => $v->channel_slug ?? 'creator',
                 'avatar_url' => $avatarUrl,
                 'is_verified_badge' => false,
             ],
@@ -37,7 +77,7 @@ class AdminVideoController extends Controller
             'reviewed_at' => $v->reviewed_at ?? null,
             'is_hidden' => (bool)($v->is_hidden ?? 0),
             'is_featured' => (bool)($v->is_featured ?? 0),
-            'category' => null,
+            'category' => $category,
             'tags' => [],
             'renditions' => [],
             'captions' => [],
@@ -52,7 +92,7 @@ class AdminVideoController extends Controller
             'my_reaction' => null,
             'scheduled_at' => null,
             'published_at' => $v->published_at,
-            'thumbnail_url' => $v->thumbnail_path ?? null,
+            'thumbnail_url' => $thumbnailUrl,
             'sprite_url' => null,
             'manifest_url' => (isset($v->source_path) && (str_starts_with($v->source_path, 'http://') || str_starts_with($v->source_path, 'https://')))
                 ? $v->source_path
@@ -66,7 +106,20 @@ class AdminVideoController extends Controller
     {
         $query = DB::table('videos')
             ->join('creator_profiles', 'videos.creator_profile_id', '=', 'creator_profiles.id')
-            ->select('videos.*', 'creator_profiles.user_id', 'creator_profiles.channel_name', 'creator_profiles.channel_slug', 'creator_profiles.avatar_path');
+            ->leftJoin('categories', 'videos.category_id', '=', 'categories.id')
+            ->leftJoin('users', 'creator_profiles.user_id', '=', 'users.id')
+            ->select(
+                'videos.*',
+                'creator_profiles.user_id',
+                'creator_profiles.channel_name',
+                'creator_profiles.channel_slug',
+                'creator_profiles.avatar_path as creator_avatar_path',
+                'users.name as user_name',
+                'users.email as user_email',
+                'users.avatar_path as user_avatar_path',
+                'categories.name as category_name',
+                'categories.slug as category_slug'
+            );
 
         if ($request->boolean('trashed')) {
             $query->whereNotNull('videos.deleted_at');
@@ -74,20 +127,28 @@ class AdminVideoController extends Controller
             $query->whereNull('videos.deleted_at');
         }
 
-        if ($request->filled('review_status')) {
+        if ($request->filled('review_status') && $request->query('review_status') !== 'all') {
             $query->where('videos.review_status', $request->query('review_status'));
         }
 
-        if ($request->filled('visibility')) {
+        if ($request->filled('visibility') && $request->query('visibility') !== 'all') {
             $query->where('videos.visibility', $request->query('visibility'));
         }
 
-        if ($request->filled('type')) {
+        if ($request->filled('type') && $request->query('type') !== 'all') {
             $query->where('videos.type', $request->query('type'));
         }
 
-        if ($request->filled('status')) {
+        if ($request->filled('status') && $request->query('status') !== 'all') {
             $query->where('videos.status', $request->query('status'));
+        }
+
+        if ($request->filled('category_id') && $request->query('category_id') !== 'all') {
+            $query->where('videos.category_id', $request->query('category_id'));
+        }
+
+        if ($request->filled('creator_id')) {
+            $query->where('videos.creator_profile_id', $request->query('creator_id'));
         }
 
         if ($request->boolean('hidden')) {
@@ -96,6 +157,17 @@ class AdminVideoController extends Controller
 
         if ($request->boolean('flagged')) {
             $query->where('videos.is_hidden', 1);
+        }
+
+        if ($request->filled('q') || $request->filled('search')) {
+            $search = trim($request->query('q') ?: $request->query('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('videos.title', 'like', "%{$search}%")
+                  ->orWhere('creator_profiles.channel_name', 'like', "%{$search}%")
+                  ->orWhere('users.name', 'like', "%{$search}%")
+                  ->orWhere('users.email', 'like', "%{$search}%")
+                  ->orWhere('videos.id', $search);
+            });
         }
 
         $videos = $query->orderBy('videos.id', 'desc')->get();
@@ -118,7 +190,20 @@ class AdminVideoController extends Controller
     {
         $v = DB::table('videos')
             ->join('creator_profiles', 'videos.creator_profile_id', '=', 'creator_profiles.id')
-            ->select('videos.*', 'creator_profiles.user_id', 'creator_profiles.channel_name', 'creator_profiles.channel_slug', 'creator_profiles.avatar_path')
+            ->leftJoin('categories', 'videos.category_id', '=', 'categories.id')
+            ->leftJoin('users', 'creator_profiles.user_id', '=', 'users.id')
+            ->select(
+                'videos.*',
+                'creator_profiles.user_id',
+                'creator_profiles.channel_name',
+                'creator_profiles.channel_slug',
+                'creator_profiles.avatar_path as creator_avatar_path',
+                'users.name as user_name',
+                'users.email as user_email',
+                'users.avatar_path as user_avatar_path',
+                'categories.name as category_name',
+                'categories.slug as category_slug'
+            )
             ->where('videos.id', $id)
             ->first();
 
