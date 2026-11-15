@@ -127,6 +127,14 @@ class AdminVideoController extends Controller
             $query->whereNull('videos.deleted_at');
         }
 
+        if ($request->query('pricing') === 'free' || $request->boolean('free')) {
+            $query->where(function ($q) {
+                $q->whereNull('videos.price_minor_units')->orWhere('videos.price_minor_units', 0);
+            });
+        } elseif ($request->query('pricing') === 'paid') {
+            $query->where('videos.price_minor_units', '>', 0);
+        }
+
         if ($request->filled('review_status') && $request->query('review_status') !== 'all') {
             $query->where('videos.review_status', $request->query('review_status'));
         }
@@ -216,6 +224,64 @@ class AdminVideoController extends Controller
             'meta' => null,
             'errors' => null,
         ]);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $video = DB::table('videos')->where('id', $id)->first();
+        if (!$video) {
+            return response()->json(['message' => 'Video not found.'], 404);
+        }
+
+        $request->validate([
+            'title' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:5000',
+            'category_id' => 'nullable',
+            'type' => 'nullable|string|in:long_form,short',
+            'source_path' => 'nullable|string|max:1000',
+            'thumbnail_path' => 'nullable|string|max:1000',
+            'is_hidden' => 'nullable|boolean',
+            'video' => 'nullable|file|mimes:mp4,mov,avi,webm,mkv|max:1048576',
+            'thumbnail' => 'nullable|file|image|max:10240',
+        ]);
+
+        $updates = ['updated_at' => now()];
+
+        if ($request->has('title')) {
+            $updates['title'] = $request->input('title');
+        }
+        if ($request->has('description')) {
+            $updates['description'] = $request->input('description');
+        }
+        if ($request->has('category_id')) {
+            $updates['category_id'] = $request->input('category_id') ?: null;
+        }
+        if ($request->has('type')) {
+            $updates['type'] = $request->input('type');
+        }
+        if ($request->has('is_hidden')) {
+            $updates['is_hidden'] = $request->boolean('is_hidden') ? 1 : 0;
+        }
+        if ($request->has('source_path')) {
+            $updates['source_path'] = $request->input('source_path');
+        }
+        if ($request->has('thumbnail_path')) {
+            $updates['thumbnail_path'] = $request->input('thumbnail_path');
+        }
+
+        if ($request->hasFile('video')) {
+            $path = $request->file('video')->store('videos', 'public');
+            $updates['source_path'] = '/storage/' . $path;
+        }
+
+        if ($request->hasFile('thumbnail')) {
+            $path = $request->file('thumbnail')->store('thumbnails', 'public');
+            $updates['thumbnail_path'] = '/storage/' . $path;
+        }
+
+        DB::table('videos')->where('id', $id)->update($updates);
+
+        return $this->show($id);
     }
 
     public function approve($id)
@@ -342,6 +408,95 @@ class AdminVideoController extends Controller
     public function unhide($id)
     {
         DB::table('videos')->where('id', $id)->update(['is_hidden' => 0, 'updated_at' => now()]);
+        return $this->show($id);
+    }
+
+    public function toggleVisibility($id)
+    {
+        $video = DB::table('videos')->where('id', $id)->first();
+        if (!$video) {
+            return response()->json(['message' => 'Video not found.'], 404);
+        }
+        $newHidden = $video->is_hidden ? 0 : 1;
+        DB::table('videos')->where('id', $id)->update([
+            'is_hidden' => $newHidden,
+            'updated_at' => now(),
+        ]);
+        return $this->show($id);
+    }
+
+    public function storeFreeVideo(Request $request)
+    {
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string|max:5000',
+            'category_id' => 'nullable',
+            'type' => 'nullable|string|in:long_form,short',
+            'source_path' => 'nullable|string|max:1000',
+            'thumbnail_path' => 'nullable|string|max:1000',
+            'video' => 'nullable|file|mimes:mp4,mov,avi,webm,mkv|max:1048576',
+            'thumbnail' => 'nullable|file|image|max:10240',
+        ]);
+
+        $sourcePath = $request->input('source_path');
+        $origFilename = null;
+        $sizeBytes = null;
+
+        if ($request->hasFile('video')) {
+            $videoFile = $request->file('video');
+            $origFilename = $videoFile->getClientOriginalName();
+            $sizeBytes = $videoFile->getSize();
+            $path = $videoFile->store('videos', 'public');
+            $sourcePath = '/storage/' . $path;
+        }
+
+        $thumbnailPath = $request->input('thumbnail_path');
+        if ($request->hasFile('thumbnail')) {
+            $path = $request->file('thumbnail')->store('thumbnails', 'public');
+            $thumbnailPath = '/storage/' . $path;
+        } elseif ($request->has('thumbnail_data') && str_starts_with($request->input('thumbnail_data'), 'data:image')) {
+            $dataUrl = $request->input('thumbnail_data');
+            $parts = explode(',', $dataUrl);
+            if (count($parts) === 2) {
+                $decoded = base64_decode($parts[1]);
+                $filename = 'thumbnails/thumb_' . uniqid() . '.jpg';
+                \Illuminate\Support\Facades\Storage::disk('public')->put($filename, $decoded);
+                $thumbnailPath = '/storage/' . $filename;
+            }
+        }
+
+        $user = $request->user();
+        $creatorProfile = null;
+        if ($user) {
+            $creatorProfile = DB::table('creator_profiles')->where('user_id', $user->id)->first();
+        }
+        if (!$creatorProfile) {
+            $creatorProfile = DB::table('creator_profiles')->where('id', 1)->first()
+                ?? DB::table('creator_profiles')->first();
+        }
+        $creatorProfileId = $creatorProfile ? $creatorProfile->id : 1;
+
+        $id = DB::table('videos')->insertGetId([
+            'creator_profile_id' => $creatorProfileId,
+            'category_id' => $request->input('category_id') ?: null,
+            'title' => $request->input('title'),
+            'description' => $request->input('description'),
+            'type' => $request->input('type', 'long_form'),
+            'visibility' => 'public',
+            'review_status' => 'approved',
+            'status' => 'published',
+            'is_hidden' => 0,
+            'price_minor_units' => null,
+            'original_filename' => $origFilename,
+            'size_bytes' => $sizeBytes,
+            'source_path' => $sourcePath ?: 'https://www.w3schools.com/html/mov_bbb.mp4',
+            'thumbnail_path' => $thumbnailPath,
+            'duration_seconds' => $request->input('duration_seconds', 0),
+            'published_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
         return $this->show($id);
     }
 

@@ -87,7 +87,9 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
 
         // Admin Videos (Content Management)
         Route::get('/admin/videos', [AdminVideoController::class, 'index']);
+        Route::post('/admin/videos/free', [AdminVideoController::class, 'storeFreeVideo']);
         Route::get('/admin/videos/{id}', [AdminVideoController::class, 'show']);
+        Route::patch('/admin/videos/{id}', [AdminVideoController::class, 'update']);
         Route::patch('/admin/videos/{id}/approve', [AdminVideoController::class, 'approve']);
         Route::patch('/admin/videos/{id}/reject', [AdminVideoController::class, 'reject']);
         Route::patch('/admin/videos/{id}/request-changes', [AdminVideoController::class, 'requestChanges']);
@@ -98,6 +100,7 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::patch('/admin/videos/{id}/unfeature', [AdminVideoController::class, 'unfeature']);
         Route::patch('/admin/videos/{id}/hide', [AdminVideoController::class, 'hide']);
         Route::patch('/admin/videos/{id}/unhide', [AdminVideoController::class, 'unhide']);
+        Route::patch('/admin/videos/{id}/toggle-visibility', [AdminVideoController::class, 'toggleVisibility']);
         Route::delete('/admin/videos/{id}', [AdminVideoController::class, 'destroy']);
         Route::patch('/admin/videos/{id}/restore', [AdminVideoController::class, 'restore']);
         Route::delete('/admin/videos/{id}/force', [AdminVideoController::class, 'forceDelete']);

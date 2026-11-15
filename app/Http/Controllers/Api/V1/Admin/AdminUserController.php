@@ -13,25 +13,34 @@ class AdminUserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = DB::table('users')->select('users.*');
+        $query = DB::table('users')
+            ->leftJoin('countries', 'users.country_id', '=', 'countries.id')
+            ->leftJoin('states', 'users.state_id', '=', 'states.id')
+            ->select(
+                'users.*',
+                'countries.name as country_name',
+                'states.name as state_name'
+            );
 
         if ($request->filled('q')) {
             $q = $request->query('q');
             $query->where(function ($sub) use ($q) {
-                $sub->where('name', 'like', "%{$q}%")
-                    ->orWhere('email', 'like', "%{$q}%")
-                    ->orWhere('phone', 'like', "%{$q}%");
+                $sub->where('users.name', 'like', "%{$q}%")
+                    ->orWhere('users.email', 'like', "%{$q}%")
+                    ->orWhere('users.phone', 'like', "%{$q}%")
+                    ->orWhere('countries.name', 'like', "%{$q}%")
+                    ->orWhere('states.name', 'like', "%{$q}%");
             });
         }
 
         if ($request->filled('status')) {
             $status = $request->query('status');
             if (Schema::hasColumn('users', 'status')) {
-                $query->where('status', $status);
+                $query->where('users.status', $status);
             }
         }
 
-        $users = $query->orderBy('id', 'desc')->get();
+        $users = $query->orderBy('users.id', 'desc')->get();
 
         $rolesMap = [];
         if (Schema::hasTable('model_has_roles')) {
@@ -61,6 +70,8 @@ class AdminUserController extends Controller
                 'name' => $u->name,
                 'email' => $u->email,
                 'phone' => $u->phone ?? null,
+                'country' => $u->country_name ?? null,
+                'state' => $u->state_name ?? null,
                 'avatar_url' => $this->formatAvatarUrl($u->avatar_path ?? null),
                 'status' => $u->status ?? 'active',
                 'status_reason' => $u->status_reason ?? null,
@@ -123,6 +134,8 @@ class AdminUserController extends Controller
                 'name' => $u->name,
                 'email' => $u->email,
                 'phone' => $u->phone ?? null,
+                'country' => $u->country_name ?? null,
+                'state' => $u->state_name ?? null,
                 'avatar_url' => $this->formatAvatarUrl($u->avatar_path ?? null),
                 'status' => $u->status ?? 'active',
                 'status_reason' => $u->status_reason ?? null,
