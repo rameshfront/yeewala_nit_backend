@@ -401,4 +401,278 @@ class AdminMonetizationController extends Controller
 
         return response()->json(['data' => $coupon, 'meta' => null, 'errors' => null], 201);
     }
+
+    public function videoSales(Request $request)
+    {
+        $commissionPercent = (float)(DB::table('settings')->where('group', 'payment')->where('key', 'platform_commission_percent')->value('value') ?? 20);
+
+        $purchasedVideoIds = DB::table('purchases')->distinct()->pluck('video_id')->toArray();
+
+        $query = DB::table('videos')
+            ->leftJoin('creator_profiles', 'videos.creator_profile_id', '=', 'creator_profiles.id')
+            ->leftJoin('users', 'creator_profiles.user_id', '=', 'users.id')
+            ->whereNull('videos.deleted_at')
+            ->where(function ($q) use ($purchasedVideoIds) {
+                $q->where('videos.price_minor_units', '>', 0)
+                  ->orWhereIn('videos.id', $purchasedVideoIds);
+            })
+            ->select(
+                'videos.id',
+                'videos.title',
+                'videos.type',
+                'videos.thumbnail_path',
+                'videos.duration_seconds',
+                'videos.price_minor_units',
+                'videos.created_at',
+                'creator_profiles.id as creator_profile_id',
+                'creator_profiles.channel_name',
+                'users.id as user_id',
+                'users.name as user_name',
+                'users.email as user_email',
+                'users.earnings as user_earnings',
+                'users.actualearning as user_actualearning'
+            );
+
+        if ($request->filled('search')) {
+            $search = '%' . trim($request->input('search')) . '%';
+            $query->where(function ($q) use ($search) {
+                $q->where('videos.title', 'like', $search)
+                  ->orWhere('users.name', 'like', $search)
+                  ->orWhere('users.email', 'like', $search);
+            });
+        }
+
+        $videos = $query->orderBy('videos.id', 'desc')->get();
+
+        $allPurchases = DB::table('purchases')->get()->groupBy('video_id');
+
+        $items = $videos->map(function ($v) use ($allPurchases, $commissionPercent) {
+            $videoPurchases = $allPurchases->get($v->id, collect());
+            $totalSales = $videoPurchases->count();
+            $totalGross = (float)$videoPurchases->sum('price');
+
+            $pendingPurchases = $videoPurchases->whereNull('settled_at');
+            $pendingCount = $pendingPurchases->count();
+            $pendingGross = (float)$pendingPurchases->sum('price');
+
+            $settledPurchases = $videoPurchases->whereNotNull('settled_at');
+            $settledCount = $settledPurchases->count();
+            $settledGross = (float)$settledPurchases->sum('price');
+            $settledCreatorTotal = (float)$settledPurchases->sum('settled_creator_share');
+            $settledAdminTotal = (float)$settledPurchases->sum('settled_admin_share');
+
+            $suggestedAdminCut = round($pendingGross * ($commissionPercent / 100), 2);
+            $suggestedCreatorShare = round($pendingGross * ((100 - $commissionPercent) / 100), 2);
+
+            $status = 'no_sales';
+            if ($pendingCount > 0) {
+                $status = 'pending_settlement';
+            } elseif ($totalSales > 0) {
+                $status = 'settled';
+            }
+
+            $priceRupees = $v->price_minor_units !== null ? round($v->price_minor_units / 100, 2) : 0.00;
+
+            return [
+                'id' => (int)$v->id,
+                'title' => $v->title,
+                'type' => $v->type,
+                'thumbnail_path' => $v->thumbnail_path,
+                'duration_seconds' => $v->duration_seconds,
+                'price_minor_units' => (int)($v->price_minor_units ?? 0),
+                'price' => $priceRupees,
+                'created_at' => $v->created_at,
+                'creator' => [
+                    'id' => (int)$v->creator_profile_id,
+                    'user_id' => (int)$v->user_id,
+                    'name' => $v->user_name ?? 'Unknown',
+                    'email' => $v->user_email ?? '',
+                    'channel_name' => $v->channel_name ?? $v->user_name ?? 'Creator',
+                    'pending_earnings' => (float)($v->user_earnings ?? 0),
+                    'withdrawable_balance' => (float)($v->user_actualearning ?? 0),
+                ],
+                'sales' => [
+                    'total_count' => $totalSales,
+                    'total_gross' => $totalGross,
+                    'pending_count' => $pendingCount,
+                    'pending_gross' => $pendingGross,
+                    'settled_count' => $settledCount,
+                    'settled_gross' => $settledGross,
+                    'settled_creator_total' => $settledCreatorTotal,
+                    'settled_admin_total' => $settledAdminTotal,
+                ],
+                'commission_percent' => $commissionPercent,
+                'suggested_admin_cut' => $suggestedAdminCut,
+                'suggested_creator_share' => $suggestedCreatorShare,
+                'status' => $status,
+            ];
+        });
+
+        if ($request->filled('status')) {
+            $filterStatus = $request->input('status');
+            $items = $items->filter(fn($i) => $i['status'] === $filterStatus)->values();
+        }
+
+        return response()->json([
+            'data' => $items,
+            'meta' => [
+                'total_videos' => count($items),
+                'total_pending_settlements' => $items->where('status', 'pending_settlement')->count(),
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    public function settleVideoSales(Request $request, $id)
+    {
+        $video = DB::table('videos')
+            ->leftJoin('creator_profiles', 'videos.creator_profile_id', '=', 'creator_profiles.id')
+            ->leftJoin('users', 'creator_profiles.user_id', '=', 'users.id')
+            ->where('videos.id', $id)
+            ->select('videos.*', 'creator_profiles.user_id', 'users.name as user_name', 'users.email as user_email')
+            ->first();
+
+        if (!$video) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NOT_FOUND', 'message' => 'Video not found']],
+            ], 404);
+        }
+
+        if (!$video->user_id) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'BAD_REQUEST', 'message' => 'Video creator user not found']],
+            ], 400);
+        }
+
+        $unsettled = DB::table('purchases')
+            ->where('video_id', $id)
+            ->whereNull('settled_at')
+            ->get();
+
+        if ($unsettled->isEmpty()) {
+            return response()->json([
+                'data' => null,
+                'meta' => null,
+                'errors' => [['code' => 'NO_PENDING_SALES', 'message' => 'No pending sales found for this video']],
+            ], 400);
+        }
+
+        $pendingGross = (float)$unsettled->sum('price');
+        $commissionPercent = (float)(DB::table('settings')->where('group', 'payment')->where('key', 'platform_commission_percent')->value('value') ?? 20);
+
+        if ($request->filled('creator_amount') && is_numeric($request->input('creator_amount'))) {
+            $creatorAmount = max(0, round((float)$request->input('creator_amount'), 2));
+        } else {
+            $creatorAmount = round($pendingGross * ((100 - $commissionPercent) / 100), 2);
+        }
+
+        $adminCut = max(0, round($pendingGross - $creatorAmount, 2));
+
+        DB::transaction(function () use ($id, $video, $unsettled, $pendingGross, $creatorAmount, $adminCut) {
+            $user = DB::table('users')->where('id', $video->user_id)->lockForUpdate()->first();
+
+            $perPurchaseCreator = count($unsettled) > 0 ? round($creatorAmount / count($unsettled), 2) : 0;
+            $perPurchaseAdmin = count($unsettled) > 0 ? round($adminCut / count($unsettled), 2) : 0;
+
+            // 1. Mark purchases as settled
+            DB::table('purchases')
+                ->where('video_id', $id)
+                ->whereNull('settled_at')
+                ->update([
+                    'settled_at' => now(),
+                    'settled_admin_share' => $perPurchaseAdmin,
+                    'settled_creator_share' => $perPurchaseCreator,
+                    'updated_at' => now(),
+                ]);
+
+            // 2. Credit creator's withdrawable balance (actualearning) and decrement pending earnings
+            $currentActual = (float)($user->actualearning ?? 0);
+            $currentEarnings = (float)($user->earnings ?? 0);
+
+            $newActual = round($currentActual + $creatorAmount, 2);
+            $newEarnings = max(0, round($currentEarnings - $pendingGross, 2));
+
+            DB::table('users')->where('id', $video->user_id)->update([
+                'actualearning' => $newActual,
+                'earnings' => $newEarnings,
+                'updated_at' => now(),
+            ]);
+
+            // 3. Add admin cut to admin_earnings
+            if (Schema::hasTable('admin_earnings')) {
+                $adminEarning = DB::table('admin_earnings')->first();
+                if ($adminEarning) {
+                    DB::table('admin_earnings')->where('id', $adminEarning->id)->update([
+                        'revenue' => round(((float)$adminEarning->revenue) + $adminCut, 2),
+                        'updated_at' => now(),
+                    ]);
+                } else {
+                    DB::table('admin_earnings')->insert([
+                        'revenue' => $adminCut,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            // 4. Record wallet transaction
+            if (Schema::hasTable('wallets') && Schema::hasTable('wallet_transactions')) {
+                $wallet = DB::table('wallets')->where('owner_id', $video->user_id)->where('type', 'user')->first();
+                $walletId = $wallet ? $wallet->id : DB::table('wallets')->insertGetId([
+                    'type' => 'user',
+                    'owner_id' => $video->user_id,
+                    'currency' => 'INR',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                DB::table('wallet_transactions')->insert([
+                    'wallet_id' => $walletId,
+                    'type' => 'credit',
+                    'category' => 'video_payout',
+                    'amount_minor_units' => (int)round($creatorAmount * 100),
+                    'status' => 'cleared',
+                    'description' => "Earnings approved for video: {$video->title} (" . count($unsettled) . " student purchases)",
+                    'created_by' => auth()->id() ?? 3,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // 5. Notify creator (Confidential: No mention of admin cut!)
+            if (Schema::hasTable('notifications')) {
+                DB::table('notifications')->insert([
+                    'id' => (string)\Illuminate\Support\Str::uuid(),
+                    'type' => 'creator_earnings_approved',
+                    'notifiable_type' => 'App\\Models\\User',
+                    'notifiable_id' => $video->user_id,
+                    'data' => json_encode([
+                        'video_id' => $video->id,
+                        'video_title' => $video->title,
+                        'amount' => $creatorAmount,
+                        'sales_count' => count($unsettled),
+                        'message' => "Congratulations! ₹{$creatorAmount} in earnings for your video '{$video->title}' has been approved and added to your withdrawable balance.",
+                    ]),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        });
+
+        return response()->json([
+            'data' => [
+                'video_id' => (int)$id,
+                'sales_settled' => count($unsettled),
+                'gross_amount' => $pendingGross,
+                'admin_cut' => $adminCut,
+                'creator_amount' => $creatorAmount,
+            ],
+            'meta' => null,
+            'errors' => null,
+        ]);
+    }
 }

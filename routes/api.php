@@ -123,6 +123,8 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::get('/admin/wallet-topups', [AdminMonetizationController::class, 'topups']);
         Route::post('/admin/wallet-topups/{id}/approve', [AdminMonetizationController::class, 'approveTopup']);
         Route::post('/admin/wallet-topups/{id}/reject', [AdminMonetizationController::class, 'rejectTopup']);
+        Route::get('/admin/video-sales', [AdminMonetizationController::class, 'videoSales']);
+        Route::post('/admin/video-sales/{id}/settle', [AdminMonetizationController::class, 'settleVideoSales']);
         Route::get('/admin/coupons', [AdminMonetizationController::class, 'coupons']);
         Route::post('/admin/coupons', [AdminMonetizationController::class, 'storeCoupon']);
         Route::get('/admin/analytics/reports/{type}', [AdminAnalyticsController::class, 'getReport']);
