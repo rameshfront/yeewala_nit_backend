@@ -130,7 +130,8 @@ class AdminMonetizationController extends Controller
             ->select(
                 'recharge_requests.*',
                 'users.name as user_name',
-                'users.email as user_email'
+                'users.email as user_email',
+                'users.amount as user_wallet_balance'
             );
 
         if ($request->filled('status')) {
@@ -176,6 +177,7 @@ class AdminMonetizationController extends Controller
                     'id' => (int)$r->user_id,
                     'name' => $r->user_name,
                     'email' => $r->user_email,
+                    'wallet_balance' => (float)($r->user_wallet_balance ?? 0),
                 ],
             ];
         })->values()->toArray();
